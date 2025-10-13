@@ -1,73 +1,150 @@
-# React + TypeScript + Vite
+# ProfPay - Система управления платежами профсоюза
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Современная веб-система для управления данными плательщиков профсоюза с акцентом на простоту использования и эффективную работу с таблицами данных.
 
-Currently, two official plugins are available:
+## 🎨 Дизайн-концепция
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Система построена на принципах минимализма и функциональности:
 
-## React Compiler
+- **Цветовая схема**: Светло-голубой (#61dafbaa), тёмно-голубой (#646cffaa) и белый
+- **Фокус на данных**: Основное внимание уделено таблице участников и взаимодействию с ней
+- **Интуитивный интерфейс**: Минимум кликов до любых данных
+- **Адаптивность**: Работает на всех устройствах
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 🚀 Функциональность
 
-## Expanding the ESLint configuration
+### Основные возможности
+- ✅ Управление списком плательщиков
+- ✅ Фильтрация и поиск по различным критериям
+- ✅ Детальный просмотр информации о пользователе
+- ✅ История платежей для каждого участника
+- ✅ Система уведомлений
+- ✅ Экспорт данных в CSV/PDF
+- ✅ Batch-операции для администраторов
+- ✅ Интеграция с Telegram и VK
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Роли пользователей
+- **Администратор**: Полный доступ к редактированию, удалению, batch-операциям
+- **Пользователь**: Просмотр данных, отправка напоминаний
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## 🛠 Технологический стек
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+- **Frontend**: React 19 + TypeScript
+- **Стилизация**: Tailwind CSS
+- **Сборка**: Vite
+- **Линтинг**: ESLint
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## 📦 Установка и запуск
+
+### Предварительные требования
+- Node.js 18+ 
+- npm или yarn
+
+### Установка зависимостей
+```bash
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Запуск в режиме разработки
+```bash
+npm run dev
 ```
+
+Приложение будет доступно по адресу: http://localhost:5173
+
+### Сборка для продакшена
+```bash
+npm run build
+```
+
+### Предварительный просмотр сборки
+```bash
+npm run preview
+```
+
+## 🏗 Структура проекта
+
+```
+src/
+├── components/          # React компоненты
+│   ├── Header.tsx      # Шапка сайта
+│   ├── Sidebar.tsx     # Боковое меню
+│   ├── SearchFilters.tsx # Панель поиска и фильтров
+│   ├── UsersTable.tsx  # Основная таблица пользователей
+│   ├── UserModal.tsx   # Модальное окно пользователя
+│   └── Notification.tsx # Система уведомлений
+├── types/              # TypeScript типы
+│   └── index.ts
+├── App.tsx            # Главный компонент
+├── Home.tsx           # Основная страница
+├── main.tsx           # Точка входа
+└── index.css          # Глобальные стили
+```
+
+## 🎯 Ключевые компоненты
+
+### UsersTable
+Основная таблица с функциями:
+- Сортировка по колонкам
+- Развертывание строк для просмотра деталей
+- Множественный выбор для batch-операций
+- Инлайн-действия (редактирование, удаление, напоминания)
+
+### SearchFilters
+Панель фильтрации с возможностями:
+- Поиск по имени в реальном времени
+- Фильтр по статусу оплаты
+- Фильтр по типу контакта (Telegram/VK)
+- Диапазон дат
+- Экспорт данных
+
+### UserModal
+Детальное модальное окно с:
+- Полной информацией о пользователе
+- Историей платежей
+- Статистикой
+- Быстрыми действиями
+
+## 🔧 Настройка
+
+### Цветовая схема
+Цвета настраиваются в `tailwind.config.js`:
+```javascript
+colors: {
+  primary: '#646cffaa',
+  accent: '#61dafbaa',
+  'primary-solid': '#646cff',
+  'accent-solid': '#61dafb',
+}
+```
+
+### Моковые данные
+Для демонстрации используются моковые данные в `Home.tsx`. В продакшене они должны быть заменены на API-вызовы.
+
+## 🚀 Развертывание
+
+Система готова для развертывания на любом статическом хостинге:
+- Vercel
+- Netlify
+- GitHub Pages
+- AWS S3 + CloudFront
+
+## 📱 Адаптивность
+
+Интерфейс полностью адаптивен и корректно работает на:
+- Десктопах (1920px+)
+- Планшетах (768px - 1024px)
+- Мобильных устройствах (320px - 768px)
+
+## 🔮 Планы развития
+
+- [ ] Интеграция с реальным backend API
+- [ ] Система аутентификации
+- [ ] Push-уведомления
+- [ ] Расширенная аналитика
+- [ ] Темная тема
+- [ ] Офлайн-режим (PWA)
+
+## 📄 Лицензия
+
+MIT License - см. файл LICENSE для деталей.

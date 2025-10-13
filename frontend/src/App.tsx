@@ -1,22 +1,22 @@
-import { useState } from 'react'
-import './App.css'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Layout from './components/Layout';
+import PayersPage from './PayersPage';
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <h1>Профком</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          хуёвы счетчик {count}
-        </button>
-        <p>
-          хуй хуй пизда
-        </p>
-      </div>
-    </>
-  )
+    <Router>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<div className="p-6"><h1 className="text-2xl font-semibold text-gray-900">Главная страница</h1><p className="text-gray-600 mt-2">Добро пожаловать в систему управления плательщиками</p></div>} />
+          <Route path="/payers" element={<PayersPage />} />
+          <Route path="/reports" element={<div className="p-6"><h1 className="text-2xl font-semibold text-gray-900">Отчёты</h1><p className="text-gray-600 mt-2">Раздел в разработке</p></div>} />
+          <Route path="/notifications" element={<div className="p-6"><h1 className="text-2xl font-semibold text-gray-900">Уведомления</h1><p className="text-gray-600 mt-2">Раздел в разработке</p></div>} />
+          <Route path="/settings" element={<div className="p-6"><h1 className="text-2xl font-semibold text-gray-900">Настройки</h1><p className="text-gray-600 mt-2">Раздел в разработке</p></div>} />
+          <Route path="*" element={<div className="p-6"><h1 className="text-2xl font-semibold text-gray-900">Страница не найдена</h1><p className="text-gray-600 mt-2">Запрашиваемая страница не существует</p></div>} />
+        </Routes>
+      </Layout>
+    </Router>
+  );
 }
 
-export default App
+export default App;

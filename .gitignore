@@ -300,3 +300,6 @@ tailwind.min.css
 tailwind-*.css
 *.tailwind.css
 output.css
+
+.kiro
+.vscode
