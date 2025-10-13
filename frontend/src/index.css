@@ -22,17 +22,47 @@ body {
   padding: 0;
 }
 
-@keyframes slide-in {
+/* Простые анимации для переходов */
+@keyframes fade-in-up {
   from {
-    transform: translateX(100%);
+    transform: translateY(20px);
     opacity: 0;
   }
   to {
-    transform: translateX(0);
+    transform: translateY(0);
     opacity: 1;
   }
 }
 
-.animate-slide-in {
-  animation: slide-in 0.3s ease-out;
+@keyframes modal-appear {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.4s ease-out;
+}
+
+.animate-modal-appear {
+  animation: modal-appear 0.3s ease-out;
+}
+
+/* Стили для перетаскиваемых окон */
+.draggable-modal {
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  transition: box-shadow 0.2s ease;
+}
+
+.draggable-modal:hover {
+  box-shadow: 0 35px 60px -12px rgba(0, 0, 0, 0.35);
+}
+
+.draggable-modal.active {
+  box-shadow: 0 25px 50px -12px rgba(100, 108, 255, 0.3);
 }

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Header from './Header';
 import Sidebar from './Sidebar';
 import Footer from './Footer';
+import PageTransition from './PageTransition';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -24,8 +25,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
         />
         
-        <main className="flex-1 flex flex-col">
-          {children}
+        <main className="flex-1 flex flex-col relative overflow-hidden">
+          <PageTransition>
+            {children}
+          </PageTransition>
         </main>
       </div>
       

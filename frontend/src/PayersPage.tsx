@@ -127,11 +127,7 @@ const PayersPage: React.FC = () => {
     // Здесь будет логика экспорта
   };
 
-  const handleRemind = (userId: string) => {
-    const user = users.find(u => u.id === userId);
-    showNotification(`Напоминание отправлено пользователю ${user?.fullName}`, 'success');
-    // Здесь будет логика отправки напоминания
-  };
+
 
   const handleUserEdit = (user: User) => {
     setSelectedUser(user);
@@ -151,11 +147,7 @@ const PayersPage: React.FC = () => {
     }
   };
 
-  const handleBatchRemind = () => {
-    if (selectedUsers.length === 0) return;
-    showNotification(`Напоминания отправлены ${selectedUsers.length} пользователям`, 'success');
-    setSelectedUsers([]);
-  };
+
 
   const handleBatchDelete = () => {
     if (selectedUsers.length === 0) return;
@@ -191,12 +183,6 @@ const PayersPage: React.FC = () => {
             </span>
             <div className="flex gap-2">
               <button
-                onClick={handleBatchRemind}
-                className="px-3 py-1 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600 transition-colors"
-              >
-                Отправить напоминание
-              </button>
-              <button
                 onClick={handleBatchDelete}
                 className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 transition-colors"
               >
@@ -213,7 +199,6 @@ const PayersPage: React.FC = () => {
         userRole={userRole}
         selectedUsers={selectedUsers}
         onSelectionChange={setSelectedUsers}
-        onRemind={handleRemind}
         onUserEdit={handleUserEdit}
         onUserDelete={handleUserDelete}
         onUserSelect={handleUserSelect}
@@ -227,7 +212,6 @@ const PayersPage: React.FC = () => {
           setSelectedUser(null);
         }}
         onEdit={handleUserEdit}
-        onRemind={handleRemind}
         canEdit={userRole.canEdit}
       />
 

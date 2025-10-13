@@ -37,6 +37,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed = false, onToggle }) => {
 
   // Handle navigation when menu item is clicked with error handling and throttling
   const handleMenuItemClick = (path: string) => {
+    // Предотвращаем навигацию если уже находимся на этой странице
+    if (location.pathname === path) {
+      return;
+    }
+
     throttledNavigate(() => {
       safeNavigate(path);
     });
@@ -54,24 +59,39 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed = false, onToggle }) => {
       </div>
 
       <nav className="flex-1">
-        {menuItems.map((item) => (
-          <div key={item.id} className="relative group">
-            <button
-              onClick={() => handleMenuItemClick(item.path)}
-              className={`w-full flex items-center px-4 py-3 text-white hover:bg-white hover:bg-opacity-10 transition-colors duration-200 ${activeItem === item.id ? 'bg-white bg-opacity-20 border-r-2 border-accent-solid' : ''
+        {menuItems.map((item) => {
+          const isActive = activeItem === item.id;
+          const isCurrentPage = location.pathname === item.path;
+          
+          return (
+            <div key={item.id} className="relative group">
+              <button
+                onClick={() => handleMenuItemClick(item.path)}
+                disabled={isCurrentPage}
+                className={`w-full flex items-center px-4 py-3 text-white transition-colors duration-200 ${
+                  isActive 
+                    ? 'bg-white bg-opacity-20 border-r-2 border-accent-solid' 
+                    : 'hover:bg-white hover:bg-opacity-10'
+                } ${
+                  isCurrentPage 
+                    ? 'cursor-default' 
+                    : 'cursor-pointer'
                 }`}
-            >
-              <span className="text-lg">{item.icon}</span>
-              {!isCollapsed && <span className="ml-3 text-sm">{item.label}</span>}
-            </button>
+              >
+                <span className="text-lg">{item.icon}</span>
+                {!isCollapsed && <span className="ml-3 text-sm">{item.label}</span>}
+              </button>
 
-            {isCollapsed && (
-              <div className="absolute left-full top-0 ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
-                {item.label}
-              </div>
-            )}
-          </div>
-        ))}
+              {/* Tooltip для свернутого состояния */}
+              {isCollapsed && (
+                <div className="absolute left-full top-0 ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+                  {item.label}
+                  {isCurrentPage && <span className="ml-1 text-accent-solid">•</span>}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </nav>
     </aside>
   );

@@ -6,7 +6,6 @@ interface UserModalProps {
   isOpen: boolean;
   onClose: () => void;
   onEdit?: (user: User) => void;
-  onRemind?: (userId: string) => void;
   canEdit?: boolean;
 }
 
@@ -15,7 +14,6 @@ const UserModal: React.FC<UserModalProps> = ({
   isOpen,
   onClose,
   onEdit,
-  onRemind,
   canEdit = false,
 }) => {
   if (!isOpen || !user) return null;
@@ -43,8 +41,8 @@ const UserModal: React.FC<UserModalProps> = ({
     .reduce((sum, p) => sum + p.amount, 0);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-custom max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-hover">
+    <div className="fixed inset-y-0 right-0 z-50 w-full max-w-2xl bg-white shadow-2xl border-l border-gray-200 overflow-y-auto transform transition-transform duration-300 ease-in-out">
+      <div className="h-full">
         <div className="p-6 border-b border-gray-200">
           <div className="flex justify-between items-start">
             <div>
@@ -131,13 +129,12 @@ const UserModal: React.FC<UserModalProps> = ({
                         {new Date(payment.date).toLocaleDateString('ru-RU')}
                       </div>
                     </div>
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${
-                      payment.status === 'completed' ? 'bg-green-100 text-green-800' :
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${payment.status === 'completed' ? 'bg-green-100 text-green-800' :
                       payment.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>
+                        'bg-red-100 text-red-800'
+                      }`}>
                       {payment.status === 'completed' ? 'Завершен' :
-                       payment.status === 'pending' ? 'В обработке' : 'Отклонен'}
+                        payment.status === 'pending' ? 'В обработке' : 'Отклонен'}
                     </span>
                   </div>
                 ))}
@@ -150,14 +147,6 @@ const UserModal: React.FC<UserModalProps> = ({
 
         {/* Действия */}
         <div className="p-6 border-t border-gray-200 flex gap-3 justify-end">
-          {onRemind && (
-            <button
-              onClick={() => onRemind(user.id)}
-              className="px-4 py-2 bg-yellow-500 text-white rounded-custom hover:bg-yellow-600 transition-colors duration-200"
-            >
-              Отправить напоминание
-            </button>
-          )}
           {canEdit && onEdit && (
             <button
               onClick={() => onEdit(user)}

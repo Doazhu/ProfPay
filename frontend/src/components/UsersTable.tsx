@@ -8,7 +8,7 @@ interface UsersTableProps {
   onUserSelect?: (user: User) => void;
   onUserEdit?: (user: User) => void;
   onUserDelete?: (userId: string) => void;
-  onRemind?: (userId: string) => void;
+
   selectedUsers?: string[];
   onSelectionChange?: (selectedIds: string[]) => void;
 }
@@ -20,7 +20,7 @@ const UsersTable: React.FC<UsersTableProps> = ({
   onUserSelect,
   onUserEdit,
   onUserDelete,
-  onRemind,
+
   selectedUsers = [],
   onSelectionChange,
 }) => {
@@ -206,14 +206,7 @@ const UsersTable: React.FC<UsersTableProps> = ({
                       >
                         {expandedRows.has(user.id) ? 'Скрыть' : 'Подробнее'}
                       </button>
-                      {onRemind && (
-                        <button
-                          onClick={() => onRemind(user.id)}
-                          className="text-yellow-600 hover:text-yellow-800 transition-colors duration-200"
-                        >
-                          Напомнить
-                        </button>
-                      )}
+
                       {userRole.canEdit && onUserEdit && (
                         <button
                           onClick={() => onUserEdit(user)}
