@@ -1,5 +1,6 @@
 import React from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { useNavigationError, useNavigationThrottle } from '../hooks/useNavigationError';
 
 interface SidebarProps {
   isCollapsed?: boolean;
@@ -23,7 +24,8 @@ const menuItems: MenuItem[] = [
 
 const Sidebar: React.FC<SidebarProps> = ({ isCollapsed = false, onToggle }) => {
   const location = useLocation();
-  const navigate = useNavigate();
+  const { safeNavigate } = useNavigationError();
+  const { throttledNavigate } = useNavigationThrottle();
 
   // Determine active item based on current URL path
   const getActiveItem = (currentPath: string): string => {
@@ -33,9 +35,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed = false, onToggle }) => {
 
   const activeItem = getActiveItem(location.pathname);
 
-  // Handle navigation when menu item is clicked
+  // Handle navigation when menu item is clicked with error handling and throttling
   const handleMenuItemClick = (path: string) => {
-    navigate(path);
+    throttledNavigate(() => {
+      safeNavigate(path);
+    });
   };
 
   return (

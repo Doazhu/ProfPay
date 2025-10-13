@@ -1,21 +1,36 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
+import ErrorBoundary from './components/ErrorBoundary';
 import PayersPage from './PayersPage';
+import HomePage from './HomePage';
+import ReportsPage from './ReportsPage';
+import NotificationsPage from './NotificationsPage';
+import SettingsPage from './SettingsPage';
+import NotFoundPage from './NotFoundPage';
 
 function App() {
   return (
-    <Router>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<div className="p-6"><h1 className="text-2xl font-semibold text-gray-900">Главная страница</h1><p className="text-gray-600 mt-2">Добро пожаловать в систему управления плательщиками</p></div>} />
-          <Route path="/payers" element={<PayersPage />} />
-          <Route path="/reports" element={<div className="p-6"><h1 className="text-2xl font-semibold text-gray-900">Отчёты</h1><p className="text-gray-600 mt-2">Раздел в разработке</p></div>} />
-          <Route path="/notifications" element={<div className="p-6"><h1 className="text-2xl font-semibold text-gray-900">Уведомления</h1><p className="text-gray-600 mt-2">Раздел в разработке</p></div>} />
-          <Route path="/settings" element={<div className="p-6"><h1 className="text-2xl font-semibold text-gray-900">Настройки</h1><p className="text-gray-600 mt-2">Раздел в разработке</p></div>} />
-          <Route path="*" element={<div className="p-6"><h1 className="text-2xl font-semibold text-gray-900">Страница не найдена</h1><p className="text-gray-600 mt-2">Запрашиваемая страница не существует</p></div>} />
-        </Routes>
-      </Layout>
-    </Router>
+    <ErrorBoundary>
+      <Router>
+        <Layout>
+          <ErrorBoundary fallback={
+            <div className="p-6 text-center">
+              <h2 className="text-xl font-semibold text-red-600 mb-2">Ошибка навигации</h2>
+              <p className="text-gray-600">Произошла ошибка при загрузке страницы. Попробуйте обновить браузер.</p>
+            </div>
+          }>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/payers" element={<PayersPage />} />
+              <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </ErrorBoundary>
+        </Layout>
+      </Router>
+    </ErrorBoundary>
   );
 }
 
