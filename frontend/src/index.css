@@ -2,67 +2,93 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --color-primary: #646cffaa;
-  --color-accent: #61dafbaa;
-  --color-white: #ffffff;
-  --color-text: #374151;
-  --color-text-light: #6b7280;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-  background-color: var(--color-white);
-  color: var(--color-text);
-  margin: 0;
-  padding: 0;
-}
-
-/* Простые анимации для переходов */
-@keyframes fade-in-up {
-  from {
-    transform: translateY(20px);
-    opacity: 0;
+@layer base {
+  body {
+    @apply bg-light text-dark antialiased;
+    font-family: 'Rubik', system-ui, -apple-system, sans-serif;
   }
-  to {
-    transform: translateY(0);
-    opacity: 1;
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'JetBrains Mono', monospace;
   }
 }
 
-@keyframes modal-appear {
-  from {
-    transform: scale(0.9);
-    opacity: 0;
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2;
   }
-  to {
-    transform: scale(1);
-    opacity: 1;
+
+  .btn-primary {
+    @apply btn bg-primary text-white hover:bg-primary-dark focus:ring-primary;
+  }
+
+  .btn-secondary {
+    @apply btn bg-secondary text-white hover:bg-secondary-dark focus:ring-secondary;
+  }
+
+  .btn-outline {
+    @apply btn border-2 border-accent text-accent hover:bg-accent hover:text-white focus:ring-accent;
+  }
+
+  .btn-ghost {
+    @apply btn text-accent hover:bg-light-dark focus:ring-accent;
+  }
+
+  .input {
+    @apply w-full px-4 py-2 border border-light-darker rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200;
+  }
+
+  .input-error {
+    @apply input border-red-500 focus:ring-red-500;
+  }
+
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-light-dark p-6;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply badge bg-green-100 text-green-800;
+  }
+
+  .badge-warning {
+    @apply badge bg-yellow-100 text-yellow-800;
+  }
+
+  .badge-danger {
+    @apply badge bg-red-100 text-red-800;
+  }
+
+  .badge-info {
+    @apply badge bg-blue-100 text-blue-800;
+  }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 px-4 py-3 rounded-lg text-accent transition-colors duration-200 hover:bg-light-dark hover:text-dark;
+  }
+
+  .sidebar-link-active {
+    @apply sidebar-link bg-primary text-white hover:bg-primary-dark hover:text-white;
   }
 }
 
-.animate-fade-in-up {
-  animation: fade-in-up 0.4s ease-out;
-}
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
 
-.animate-modal-appear {
-  animation: modal-appear 0.3s ease-out;
-}
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
 
-/* Стили для перетаскиваемых окон */
-.draggable-modal {
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-  transition: box-shadow 0.2s ease;
-}
+  .scrollbar-thin::-webkit-scrollbar-track {
+    @apply bg-light-dark rounded;
+  }
 
-.draggable-modal:hover {
-  box-shadow: 0 35px 60px -12px rgba(0, 0, 0, 0.35);
-}
-
-.draggable-modal.active {
-  box-shadow: 0 25px 50px -12px rgba(100, 108, 255, 0.3);
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-accent rounded hover:bg-accent-dark;
+  }
 }

@@ -7,20 +7,39 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: '#646cffaa',
-        accent: '#61dafbaa',
-        'primary-solid': '#646cff',
-        'accent-solid': '#61dafb',
+        // Custom color palette
+        'primary': {
+          DEFAULT: '#1F9788',
+          light: '#2ab8a6',
+          dark: '#177a6d',
+        },
+        'secondary': {
+          DEFAULT: '#5852ED',
+          light: '#7a75f1',
+          dark: '#4540c9',
+        },
+        'accent': {
+          DEFAULT: '#556084',
+          light: '#6b7a9e',
+          dark: '#3f4863',
+        },
+        'dark': {
+          DEFAULT: '#1D1A29',
+          light: '#2a2640',
+          lighter: '#3d3858',
+        },
+        'light': {
+          DEFAULT: '#E7EBED',
+          dark: '#d4d9dc',
+          darker: '#c1c8cc',
+        },
       },
-      borderRadius: {
-        'custom': '6px',
+      fontFamily: {
+        sans: ['Rubik', 'system-ui', '-apple-system', 'sans-serif'],
+        heading: ['JetBrains Mono', 'monospace'],
+        mono: ['JetBrains Mono', 'monospace'],
       },
-      boxShadow: {
-        'soft': '0 2px 8px rgba(0, 0, 0, 0.1)',
-        'hover': '0 4px 12px rgba(0, 0, 0, 0.15)',
-      }
     },
   },
   plugins: [],
 }
-

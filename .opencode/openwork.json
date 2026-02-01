@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "workspace": {
+    "name": "ProfPay",
+    "createdAt": 1769980762040,
+    "preset": "starter"
+  },
+  "authorizedRoots": [
+    "/Users/doazhu/fleet/ProfPay"
+  ]
+}
