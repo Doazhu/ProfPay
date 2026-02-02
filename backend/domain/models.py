@@ -80,7 +80,7 @@ class StudentGroup(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(50), nullable=False)
-    faculty_id = Column(Integer, ForeignKey("faculties.id"), nullable=True)  # Optional now
+    faculty_id = Column(Integer, ForeignKey("faculties.id"), nullable=False)  # Required
     course = Column(Integer, nullable=True)  # 1-6 course, optional
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, server_default=func.now())

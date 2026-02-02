@@ -31,11 +31,11 @@ export interface Faculty {
 export interface StudentGroup {
   id: number;
   name: string;
-  faculty_id: number | null;
+  faculty_id: number;  // Required now
   course: number | null;
   is_active: boolean;
   created_at: string;
-  faculty?: Faculty;
+  faculty: Faculty;  // Always present
 }
 
 // Payment Settings
@@ -182,7 +182,7 @@ export interface PaymentSettingsCreate {
 
 export interface GroupCreate {
   name: string;
-  faculty_id?: number;
+  faculty_id: number;  // Required
   course?: number;
 }
 

@@ -5,14 +5,14 @@ from typing import Optional
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from backend.core.database import get_db
 from backend.application.schemas import (
     PayerCreate, PayerUpdate, PayerResponse, PayerWithDetailsResponse,
     PaymentCreate, PaymentUpdate, PaymentResponse,
     FacultyCreate, FacultyUpdate, FacultyResponse,
-    GroupCreate, GroupUpdate, GroupResponse,
+    GroupCreate, GroupUpdate, GroupResponse, GroupWithFacultyResponse,
     PaymentSettingsCreate, PaymentSettingsUpdate, PaymentSettingsResponse,
     PaginatedResponse
 )
@@ -105,35 +105,39 @@ async def delete_faculty(
 
 # ============== Group Endpoints ==============
 
-@router.get("/groups", response_model=list[GroupResponse])
+@router.get("/groups", response_model=list[GroupWithFacultyResponse])
 async def list_groups(
     faculty_id: Optional[int] = None,
     active_only: bool = True,
     db: Session = Depends(get_db),
     current_user: SystemUser = Depends(require_any_role)
 ):
-    """Get all student groups, optionally filtered by faculty."""
-    group_repo = GroupRepository(db)
+    """Get all student groups with faculty info, optionally filtered by faculty."""
+    query = db.query(StudentGroup).options(joinedload(StudentGroup.faculty))
+    
     if faculty_id:
-        return group_repo.get_by_faculty(faculty_id, active_only=active_only)
-    return group_repo.get_all(active_only=active_only)
+        query = query.filter(StudentGroup.faculty_id == faculty_id)
+    if active_only:
+        query = query.filter(StudentGroup.is_active == True)
+    
+    return query.all()
 
 
-@router.post("/groups", response_model=GroupResponse)
+@router.post("/groups", response_model=GroupWithFacultyResponse)
 async def create_group(
     group_data: GroupCreate,
     db: Session = Depends(get_db),
     current_user: SystemUser = Depends(require_operator)
 ):
     """Create a new student group."""
-    group_repo = GroupRepository(db)
     faculty_repo = FacultyRepository(db)
 
-    # Validate faculty exists if provided
-    if group_data.faculty_id and not faculty_repo.get_by_id(group_data.faculty_id):
+    # Validate faculty exists (required)
+    faculty = faculty_repo.get_by_id(group_data.faculty_id)
+    if not faculty:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Faculty not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Faculty with id {group_data.faculty_id} not found"
         )
 
     group = StudentGroup(
@@ -141,10 +145,18 @@ async def create_group(
         faculty_id=group_data.faculty_id,
         course=group_data.course
     )
-    return group_repo.create(group)
+    
+    db.add(group)
+    db.commit()
+    db.refresh(group)
+    
+    # Load faculty relationship
+    db.refresh(group, ['faculty'])
+    
+    return group
 
 
-@router.put("/groups/{group_id}", response_model=GroupResponse)
+@router.put("/groups/{group_id}", response_model=GroupWithFacultyResponse)
 async def update_group(
     group_id: int,
     group_data: GroupUpdate,
@@ -152,8 +164,7 @@ async def update_group(
     current_user: SystemUser = Depends(require_operator)
 ):
     """Update a student group."""
-    group_repo = GroupRepository(db)
-    group = group_repo.get_by_id(group_id)
+    group = db.query(StudentGroup).filter(StudentGroup.id == group_id).first()
 
     if not group:
         raise HTTPException(
@@ -161,16 +172,28 @@ async def update_group(
             detail="Group not found"
         )
 
+    # Validate faculty if being updated
+    if group_data.faculty_id is not None:
+        faculty_repo = FacultyRepository(db)
+        faculty = faculty_repo.get_by_id(group_data.faculty_id)
+        if not faculty:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Faculty with id {group_data.faculty_id} not found"
+            )
+        group.faculty_id = group_data.faculty_id
+
     if group_data.name is not None:
         group.name = group_data.name
-    if group_data.faculty_id is not None:
-        group.faculty_id = group_data.faculty_id
     if group_data.course is not None:
         group.course = group_data.course
     if group_data.is_active is not None:
         group.is_active = group_data.is_active
 
-    return group_repo.update(group)
+    db.commit()
+    db.refresh(group, ['faculty'])
+    
+    return group
 
 
 @router.delete("/groups/{group_id}")

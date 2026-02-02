@@ -109,19 +109,27 @@ export default function SettingsPage() {
 
   // Group handlers
   const handleAddGroup = async () => {
-    if (!newGroupName.trim()) return;
+    if (!newGroupName.trim()) {
+      alert('Введите название группы');
+      return;
+    }
+    if (!selectedFacultyId) {
+      alert('Выберите факультет для группы');
+      return;
+    }
     try {
       await groupApi.create({
         name: newGroupName,
-        faculty_id: selectedFacultyId || undefined,
+        faculty_id: selectedFacultyId,
         course: newGroupCourse,
       });
       setNewGroupName('');
       setNewGroupCourse(undefined);
       const data = await groupApi.getAll(undefined, false);
       setGroups(data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create group:', error);
+      alert(error.response?.data?.detail || 'Ошибка при создании группы');
     }
   };
 
@@ -403,27 +411,38 @@ export default function SettingsPage() {
           </div>
 
           {/* Add Group Form */}
-          <div className="flex gap-2 mb-4">
-            <input
-              type="text"
-              value={newGroupName}
-              onChange={(e) => setNewGroupName(e.target.value)}
-              placeholder="Название группы"
-              className="input flex-1"
-            />
-            <select
-              value={newGroupCourse || ''}
-              onChange={(e) => setNewGroupCourse(e.target.value ? Number(e.target.value) : undefined)}
-              className="input w-28"
-            >
-              <option value="">Курс</option>
-              {[1, 2, 3, 4, 5, 6].map((c) => (
-                <option key={c} value={c}>{c} курс</option>
-              ))}
-            </select>
-            <button onClick={handleAddGroup} className="btn-primary px-4">
-              + Добавить
-            </button>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <p className="text-sm text-blue-800 mb-3">
+              <strong>Важно:</strong> Для создания группы необходимо выбрать факультет выше
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                placeholder="Название группы (например: ИВТ-21)"
+                className="input flex-1"
+                disabled={!selectedFacultyId}
+              />
+              <select
+                value={newGroupCourse || ''}
+                onChange={(e) => setNewGroupCourse(e.target.value ? Number(e.target.value) : undefined)}
+                className="input w-28"
+                disabled={!selectedFacultyId}
+              >
+                <option value="">Курс</option>
+                {[1, 2, 3, 4, 5, 6].map((c) => (
+                  <option key={c} value={c}>{c} курс</option>
+                ))}
+              </select>
+              <button 
+                onClick={handleAddGroup} 
+                className="btn-primary px-4"
+                disabled={!selectedFacultyId}
+              >
+                + Добавить
+              </button>
+            </div>
           </div>
 
           {/* Group List */}
@@ -468,8 +487,8 @@ export default function SettingsPage() {
                       <div>
                         <p className="font-medium text-dark">{group.name}</p>
                         <p className="text-sm text-accent">
-                          {group.course ? `${group.course} курс` : 'Курс не указан'}
-                          {group.faculty_id && ` • ${faculties.find(f => f.id === group.faculty_id)?.short_name || ''}`}
+                          {group.faculty?.short_name || group.faculty?.name || 'Факультет не указан'}
+                          {group.course && ` • ${group.course} курс`}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">

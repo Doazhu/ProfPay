@@ -143,7 +143,7 @@ class FacultyResponse(BaseModel):
 class GroupCreate(BaseModel):
     """Schema for creating a student group."""
     name: str = Field(..., min_length=1, max_length=50)
-    faculty_id: Optional[int] = None  # Optional now
+    faculty_id: int = Field(..., gt=0)  # Required
     course: Optional[int] = Field(None, ge=1, le=6)
 
     @field_validator('name')
@@ -155,7 +155,7 @@ class GroupCreate(BaseModel):
 class GroupUpdate(BaseModel):
     """Schema for updating a student group."""
     name: Optional[str] = Field(None, min_length=1, max_length=50)
-    faculty_id: Optional[int] = None
+    faculty_id: Optional[int] = Field(None, gt=0)
     course: Optional[int] = Field(None, ge=1, le=6)
     is_active: Optional[bool] = None
 
@@ -169,7 +169,7 @@ class GroupResponse(BaseModel):
     """Student group response schema."""
     id: int
     name: str
-    faculty_id: Optional[int]
+    faculty_id: int  # Always present now
     course: Optional[int]
     is_active: bool
     created_at: datetime
@@ -180,7 +180,7 @@ class GroupResponse(BaseModel):
 
 class GroupWithFacultyResponse(GroupResponse):
     """Group response with faculty info."""
-    faculty: Optional[FacultyResponse]
+    faculty: FacultyResponse  # Always present
 
 
 # ============== Payment Settings Schemas ==============
