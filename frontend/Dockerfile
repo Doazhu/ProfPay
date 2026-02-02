@@ -11,7 +11,8 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 
 # Install all dependencies (including devDependencies needed for build)
-RUN npm ci
+# Fix vulnerabilities automatically
+RUN npm ci && npm audit fix || true
 
 # =============================================================================
 # Stage 2: Builder
