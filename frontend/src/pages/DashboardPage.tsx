@@ -23,14 +23,14 @@ function StatCard({ title, value, subtitle, color, icon }: StatCardProps) {
   };
 
   return (
-    <div className="card hover:shadow-md transition-shadow">
+    <div className="card-interactive">
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-accent font-medium">{title}</p>
           <p className="text-3xl font-bold text-dark mt-2">{value}</p>
           {subtitle && <p className="text-sm text-accent mt-1">{subtitle}</p>}
         </div>
-        <div className={`p-3 rounded-lg ${colorClasses[color]}`}>
+        <div className={`p-3 rounded-lg transition-transform duration-200 group-hover:scale-110 ${colorClasses[color]}`}>
           {icon}
         </div>
       </div>
@@ -97,14 +97,14 @@ export default function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-64 animate-fade-in">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="animate-fade-in">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-dark">Панель управления</h1>
@@ -162,7 +162,7 @@ export default function DashboardPage() {
             </thead>
             <tbody>
               {facultyStats.map((faculty) => (
-                <tr key={faculty.faculty_id} className="border-b border-light-dark last:border-0 hover:bg-light-dark/50">
+                <tr key={faculty.faculty_id} className="border-b border-light-dark last:border-0 table-row-interactive">
                   <td className="py-3 px-4 text-dark">{faculty.faculty_name}</td>
                   <td className="py-3 px-4 text-right text-dark">{faculty.total_payers}</td>
                   <td className="py-3 px-4 text-right text-green-600">{faculty.paid_count}</td>
@@ -181,9 +181,9 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
         <Link
           to="/payers"
-          className="card hover:shadow-md transition-shadow flex items-center gap-4 group"
+          className="card-interactive flex items-center gap-4 group"
         >
-          <div className="p-3 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+          <div className="p-3 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-all duration-200">
             <UsersIcon />
           </div>
           <div>
@@ -194,9 +194,9 @@ export default function DashboardPage() {
 
         <Link
           to="/debtors"
-          className="card hover:shadow-md transition-shadow flex items-center gap-4 group"
+          className="card-interactive flex items-center gap-4 group"
         >
-          <div className="p-3 rounded-lg bg-red-100 text-red-600 group-hover:bg-red-500 group-hover:text-white transition-colors">
+          <div className="p-3 rounded-lg bg-red-100 text-red-600 group-hover:bg-red-500 group-hover:text-white transition-all duration-200">
             <AlertIcon />
           </div>
           <div>
@@ -207,9 +207,9 @@ export default function DashboardPage() {
 
         <Link
           to="/add-payer"
-          className="card hover:shadow-md transition-shadow flex items-center gap-4 group"
+          className="card-interactive flex items-center gap-4 group"
         >
-          <div className="p-3 rounded-lg bg-secondary/10 text-secondary group-hover:bg-secondary group-hover:text-white transition-colors">
+          <div className="p-3 rounded-lg bg-secondary/10 text-secondary group-hover:bg-secondary group-hover:text-white transition-all duration-200">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>

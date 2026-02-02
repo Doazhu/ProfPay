@@ -190,7 +190,7 @@ export default function PayerDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-64 animate-fade-in">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
@@ -198,9 +198,9 @@ export default function PayerDetailPage() {
 
   if (!payer) {
     return (
-      <div className="text-center py-12">
+      <div className="text-center py-12 animate-fade-in">
         <p className="text-lg text-accent">Плательщик не найден</p>
-        <Link to="/payers" className="text-primary hover:underline mt-4 inline-block">
+        <Link to="/payers" className="text-primary hover:underline mt-4 inline-block transition-colors duration-150">
           Вернуться к списку
         </Link>
       </div>
@@ -208,13 +208,13 @@ export default function PayerDetailPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <button
             onClick={() => navigate(-1)}
-            className="text-accent hover:text-dark mb-2 flex items-center gap-1 text-sm"
+            className="text-accent hover:text-dark mb-2 flex items-center gap-1 text-sm transition-colors duration-150"
           >
             <span>←</span> Назад
           </button>
@@ -443,7 +443,7 @@ export default function PayerDetailPage() {
 
         {/* Payment Form */}
         {showPaymentForm && (
-          <div className="mb-6 p-4 bg-light-dark/30 rounded-lg">
+          <div className="mb-6 p-4 bg-light-dark/30 rounded-lg animate-slide-in">
             <h3 className="font-medium text-dark mb-3">Новый платёж</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
@@ -534,7 +534,7 @@ export default function PayerDetailPage() {
             {payments.map((payment) => (
               <div
                 key={payment.id}
-                className="flex items-center justify-between p-3 bg-light-dark/30 rounded-lg"
+                className="flex items-center justify-between p-3 bg-light-dark/30 rounded-lg transition-all duration-150 hover:bg-light-dark/50"
               >
                 <div className="flex items-center gap-4">
                   <div className="text-lg font-bold text-primary">
@@ -559,7 +559,7 @@ export default function PayerDetailPage() {
                 {canEdit && (
                   <button
                     onClick={() => handleDeletePayment(payment.id)}
-                    className="text-red-600 hover:text-red-700 text-sm"
+                    className="text-red-600 hover:text-red-700 text-sm transition-colors duration-150"
                   >
                     Удалить
                   </button>

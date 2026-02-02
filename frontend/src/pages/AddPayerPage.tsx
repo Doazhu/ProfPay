@@ -97,7 +97,7 @@ export default function AddPayerPage() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-2xl mx-auto animate-fade-in">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-dark">Добавить плательщика</h1>
@@ -107,7 +107,7 @@ export default function AddPayerPage() {
       {/* Form */}
       <form onSubmit={handleSubmit} className="card">
         {error && (
-          <div className="mb-6 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+          <div className="mb-6 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm animate-scale-in">
             {error}
           </div>
         )}

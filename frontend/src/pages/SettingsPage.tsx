@@ -250,14 +250,14 @@ export default function SettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-64 animate-fade-in">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="animate-fade-in">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-dark">Настройки системы</h1>
@@ -268,30 +268,30 @@ export default function SettingsPage() {
       <div className="flex gap-2 mb-6">
         <button
           onClick={() => setActiveTab('faculties')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+          className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
             activeTab === 'faculties'
-              ? 'bg-primary text-white'
-              : 'bg-light-dark text-accent hover:bg-light-dark/70'
+              ? 'bg-primary text-white shadow-md shadow-primary/25'
+              : 'bg-light-dark text-accent hover:bg-light-darker hover:-translate-y-0.5'
           }`}
         >
           Факультеты
         </button>
         <button
           onClick={() => setActiveTab('groups')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+          className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
             activeTab === 'groups'
-              ? 'bg-primary text-white'
-              : 'bg-light-dark text-accent hover:bg-light-dark/70'
+              ? 'bg-primary text-white shadow-md shadow-primary/25'
+              : 'bg-light-dark text-accent hover:bg-light-darker hover:-translate-y-0.5'
           }`}
         >
           Группы
         </button>
         <button
           onClick={() => setActiveTab('payment')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+          className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
             activeTab === 'payment'
-              ? 'bg-primary text-white'
-              : 'bg-light-dark text-accent hover:bg-light-dark/70'
+              ? 'bg-primary text-white shadow-md shadow-primary/25'
+              : 'bg-light-dark text-accent hover:bg-light-darker hover:-translate-y-0.5'
           }`}
         >
           Оплата по семестрам
@@ -300,7 +300,7 @@ export default function SettingsPage() {
 
       {/* Faculties Tab */}
       {activeTab === 'faculties' && (
-        <div className="card">
+        <div className="card animate-fade-in-fast">
           <h2 className="text-lg font-semibold text-dark mb-4">Факультеты</h2>
 
           {/* Add Faculty Form */}
@@ -393,7 +393,7 @@ export default function SettingsPage() {
 
       {/* Groups Tab */}
       {activeTab === 'groups' && (
-        <div className="card">
+        <div className="card animate-fade-in-fast">
           <h2 className="text-lg font-semibold text-dark mb-4">Группы</h2>
 
           {/* Faculty filter */}
@@ -523,7 +523,7 @@ export default function SettingsPage() {
 
       {/* Payment Settings Tab */}
       {activeTab === 'payment' && (
-        <div className="card">
+        <div className="card animate-fade-in-fast">
           <h2 className="text-lg font-semibold text-dark mb-4">Настройки оплаты по семестрам</h2>
           <p className="text-accent text-sm mb-4">
             Укажите сумму оплаты за каждый семестр для каждого учебного года

@@ -103,7 +103,7 @@ export default function DebtorsPage() {
   };
 
   return (
-    <div>
+    <div className="animate-fade-in">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-dark flex items-center gap-2">
@@ -174,11 +174,11 @@ export default function DebtorsPage() {
       {/* Table */}
       <div className="card overflow-hidden">
         {isLoading ? (
-          <div className="flex items-center justify-center h-64">
+          <div className="flex items-center justify-center h-64 animate-fade-in">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
           </div>
         ) : debtors.length === 0 ? (
-          <div className="text-center py-12">
+          <div className="text-center py-12 animate-scale-in">
             <svg className="w-16 h-16 mx-auto text-green-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -200,11 +200,11 @@ export default function DebtorsPage() {
               </thead>
               <tbody>
                 {debtors.map((debtor) => (
-                  <tr key={debtor.id} className="border-b border-light-dark last:border-0 hover:bg-red-50/50">
+                  <tr key={debtor.id} className="border-b border-light-dark last:border-0 transition-colors duration-150 hover:bg-red-50/50">
                     <td className="py-3 px-4">
                       <Link
                         to={`/payers/${debtor.id}`}
-                        className="text-dark hover:text-primary font-medium"
+                        className="text-dark hover:text-primary font-medium transition-colors duration-150"
                       >
                         {debtor.full_name}
                       </Link>

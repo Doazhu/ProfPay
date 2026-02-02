@@ -60,14 +60,14 @@ export default function ReportsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-64 animate-fade-in">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="animate-fade-in">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-dark">Отчёты и статистика</h1>
@@ -127,16 +127,16 @@ export default function ReportsPage() {
                   ? (faculty.paid_count / faculty.total_payers) * 100
                   : 0;
                 return (
-                  <tr key={faculty.faculty_id} className="border-b border-light-dark last:border-0 hover:bg-light-dark/30">
+                  <tr key={faculty.faculty_id} className="border-b border-light-dark last:border-0 table-row-interactive">
                     <td className="py-3 px-4 text-dark font-medium">{faculty.faculty_name}</td>
                     <td className="py-3 px-4 text-right text-dark">{faculty.total_payers}</td>
                     <td className="py-3 px-4 text-right text-green-600">{faculty.paid_count}</td>
                     <td className="py-3 px-4 text-right text-red-600">{faculty.unpaid_count}</td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <div className="w-24 bg-light-dark rounded-full h-2">
+                        <div className="w-24 bg-light-dark rounded-full h-2 overflow-hidden">
                           <div
-                            className="bg-primary h-2 rounded-full transition-all"
+                            className="bg-primary h-2 rounded-full transition-all duration-500 ease-out"
                             style={{ width: `${percentage}%` }}
                           />
                         </div>
@@ -198,9 +198,9 @@ export default function ReportsPage() {
                         {formatMoney(month.total_amount)}
                       </td>
                       <td className="py-3 px-4">
-                        <div className="w-full bg-light-dark rounded-full h-4">
+                        <div className="w-full bg-light-dark rounded-full h-4 overflow-hidden">
                           <div
-                            className="bg-secondary h-4 rounded-full transition-all"
+                            className="bg-secondary h-4 rounded-full transition-all duration-500 ease-out"
                             style={{ width: `${barWidth}%` }}
                           />
                         </div>

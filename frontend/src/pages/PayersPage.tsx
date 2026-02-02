@@ -134,7 +134,7 @@ export default function PayersPage() {
   };
 
   return (
-    <div>
+    <div className="animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -211,11 +211,11 @@ export default function PayersPage() {
       {/* Table */}
       <div className="card overflow-hidden">
         {isLoading ? (
-          <div className="flex items-center justify-center h-64">
+          <div className="flex items-center justify-center h-64 animate-fade-in">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
           </div>
         ) : payers.length === 0 ? (
-          <div className="text-center py-12 text-accent">
+          <div className="text-center py-12 text-accent animate-fade-in">
             <p>Плательщики не найдены</p>
           </div>
         ) : (
@@ -234,11 +234,11 @@ export default function PayersPage() {
               </thead>
               <tbody>
                 {payers.map((payer) => (
-                  <tr key={payer.id} className="border-b border-light-dark last:border-0 hover:bg-light-dark/30">
+                  <tr key={payer.id} className="border-b border-light-dark last:border-0 table-row-interactive">
                     <td className="py-3 px-4">
                       <Link
                         to={`/payers/${payer.id}`}
-                        className="text-dark hover:text-primary font-medium"
+                        className="text-dark hover:text-primary font-medium transition-colors duration-150"
                       >
                         {payer.full_name}
                       </Link>
@@ -258,7 +258,7 @@ export default function PayersPage() {
                     <td className="py-3 px-4 text-right">
                       <Link
                         to={`/payers/${payer.id}`}
-                        className="text-primary hover:text-primary-dark text-sm"
+                        className="text-primary hover:text-primary-dark text-sm transition-colors duration-150"
                       >
                         Подробнее
                       </Link>

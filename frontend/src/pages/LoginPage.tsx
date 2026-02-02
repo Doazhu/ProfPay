@@ -31,7 +31,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-light px-4">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md animate-fade-in-up">
         {/* Logo */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-primary">ProfPay</h1>
@@ -43,7 +43,7 @@ export default function LoginPage() {
           <h2 className="text-xl font-semibold text-dark mb-6">Вход в систему</h2>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm animate-scale-in">
               {error}
             </div>
           )}
