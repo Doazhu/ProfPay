@@ -47,7 +47,7 @@ export default function PayersPage() {
     if (facultyId) {
       loadGroups(facultyId);
     } else {
-      setGroups([]);
+      loadAllGroups();
     }
   }, [facultyId]);
 
@@ -57,6 +57,15 @@ export default function PayersPage() {
       setFaculties(facultyData);
     } catch (error) {
       console.error('Failed to load filters:', error);
+    }
+  };
+
+  const loadAllGroups = async () => {
+    try {
+      const groupData = await groupApi.getAll();
+      setGroups(groupData);
+    } catch (error) {
+      console.error('Failed to load groups:', error);
     }
   };
 
@@ -111,6 +120,19 @@ export default function PayersPage() {
     }).format(amount);
   };
 
+  // Get faculty/group names for display
+  const getFacultyName = (id: number | null) => {
+    if (!id) return '—';
+    const faculty = faculties.find(f => f.id === id);
+    return faculty?.short_name || faculty?.name || '—';
+  };
+
+  const getGroupName = (id: number | null) => {
+    if (!id) return '—';
+    const group = groups.find(g => g.id === id);
+    return group?.name || '—';
+  };
+
   return (
     <div>
       {/* Header */}
@@ -133,7 +155,7 @@ export default function PayersPage() {
           <div className="lg:col-span-2">
             <input
               type="text"
-              placeholder="Поиск по ФИО, email..."
+              placeholder="Поиск по ФИО, email, телефону..."
               value={search}
               onChange={(e) => updateFilter('search', e.target.value)}
               className="input"
@@ -162,7 +184,6 @@ export default function PayersPage() {
             value={groupId || ''}
             onChange={(e) => updateFilter('group', e.target.value)}
             className="input"
-            disabled={!facultyId}
           >
             <option value="">Все группы</option>
             {groups.map((g) => (
@@ -205,6 +226,7 @@ export default function PayersPage() {
                   <th className="text-left py-3 px-4 text-sm font-medium text-accent">ФИО</th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-accent">Факультет</th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-accent">Группа</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-accent">Курс</th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-accent">Статус</th>
                   <th className="text-right py-3 px-4 text-sm font-medium text-accent">Оплачено</th>
                   <th className="text-right py-3 px-4 text-sm font-medium text-accent">Действия</th>
@@ -220,12 +242,13 @@ export default function PayersPage() {
                       >
                         {payer.full_name}
                       </Link>
-                      {payer.student_id && (
-                        <p className="text-xs text-accent">{payer.student_id}</p>
+                      {payer.email && (
+                        <p className="text-xs text-accent">{payer.email}</p>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-accent">{payer.faculty_id}</td>
-                    <td className="py-3 px-4 text-accent">{payer.group_id || '-'}</td>
+                    <td className="py-3 px-4 text-accent">{getFacultyName(payer.faculty_id)}</td>
+                    <td className="py-3 px-4 text-accent">{getGroupName(payer.group_id)}</td>
+                    <td className="py-3 px-4 text-accent">{payer.course || '—'}</td>
                     <td className="py-3 px-4">
                       <StatusBadge status={payer.status} />
                     </td>

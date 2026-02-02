@@ -9,11 +9,15 @@ import type {
   Payment,
   PayerCreate,
   PaymentCreate,
+  PaymentSettings,
+  PaymentSettingsCreate,
   DashboardStats,
   FacultyStats,
   MonthlyStats,
   PaginatedResponse,
   PaymentStatus,
+  GroupCreate,
+  FacultyCreate,
 } from '../types';
 
 // Create axios instance
@@ -92,7 +96,7 @@ export const facultyApi = {
     return data;
   },
 
-  create: async (faculty: Partial<Faculty>): Promise<Faculty> => {
+  create: async (faculty: FacultyCreate): Promise<Faculty> => {
     const { data } = await api.post('/faculties', faculty);
     return data;
   },
@@ -100,6 +104,10 @@ export const facultyApi = {
   update: async (id: number, faculty: Partial<Faculty>): Promise<Faculty> => {
     const { data } = await api.put(`/faculties/${id}`, faculty);
     return data;
+  },
+
+  delete: async (id: number): Promise<void> => {
+    await api.delete(`/faculties/${id}`);
   },
 };
 
@@ -113,7 +121,7 @@ export const groupApi = {
     return data;
   },
 
-  create: async (group: Partial<StudentGroup>): Promise<StudentGroup> => {
+  create: async (group: GroupCreate): Promise<StudentGroup> => {
     const { data } = await api.post('/groups', group);
     return data;
   },
@@ -121,6 +129,38 @@ export const groupApi = {
   update: async (id: number, group: Partial<StudentGroup>): Promise<StudentGroup> => {
     const { data } = await api.put(`/groups/${id}`, group);
     return data;
+  },
+
+  delete: async (id: number): Promise<void> => {
+    await api.delete(`/groups/${id}`);
+  },
+};
+
+// ============== Payment Settings API ==============
+
+export const paymentSettingsApi = {
+  getAll: async (): Promise<PaymentSettings[]> => {
+    const { data } = await api.get('/payment-settings');
+    return data;
+  },
+
+  getCurrent: async (): Promise<PaymentSettings> => {
+    const { data } = await api.get('/payment-settings/current');
+    return data;
+  },
+
+  create: async (settings: PaymentSettingsCreate): Promise<PaymentSettings> => {
+    const { data } = await api.post('/payment-settings', settings);
+    return data;
+  },
+
+  update: async (id: number, settings: Partial<PaymentSettingsCreate>): Promise<PaymentSettings> => {
+    const { data } = await api.put(`/payment-settings/${id}`, settings);
+    return data;
+  },
+
+  delete: async (id: number): Promise<void> => {
+    await api.delete(`/payment-settings/${id}`);
   },
 };
 

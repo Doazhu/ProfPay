@@ -2,10 +2,11 @@
 Database initialization script.
 Creates tables and initial data.
 """
+from decimal import Decimal
 from backend.core.database import engine, SessionLocal, Base
 from backend.core.security import get_password_hash
 from backend.domain.models import (
-    SystemUser, Faculty, StudentGroup, UserRole
+    SystemUser, Faculty, StudentGroup, UserRole, PaymentSettings
 )
 
 
@@ -82,6 +83,24 @@ def create_initial_data():
 
             db.commit()
             print("Sample groups created for ФИТ!")
+
+        # Create payment settings for current academic year
+        current_year = "2024-2025"
+        existing_settings = db.query(PaymentSettings).filter(
+            PaymentSettings.academic_year == current_year
+        ).first()
+
+        if not existing_settings:
+            settings = PaymentSettings(
+                academic_year=current_year,
+                currency="RUB",
+                fall_amount=Decimal("500.00"),
+                spring_amount=Decimal("500.00"),
+                is_active=True
+            )
+            db.add(settings)
+            db.commit()
+            print(f"Payment settings created for {current_year}!")
 
     except Exception as e:
         db.rollback()

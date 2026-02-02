@@ -6,6 +6,7 @@ import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import PayersPage from './pages/PayersPage';
+import PayerDetailPage from './pages/PayerDetailPage';
 import DebtorsPage from './pages/DebtorsPage';
 import AddPayerPage from './pages/AddPayerPage';
 import ReportsPage from './pages/ReportsPage';
@@ -40,6 +41,7 @@ function App() {
             >
               <Route index element={<DashboardPage />} />
               <Route path="payers" element={<PayersPage />} />
+              <Route path="payers/:id" element={<PayerDetailPage />} />
               <Route path="debtors" element={<DebtorsPage />} />
               <Route
                 path="add-payer"

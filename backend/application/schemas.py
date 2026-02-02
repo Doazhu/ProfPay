@@ -10,7 +10,7 @@ import html
 
 from pydantic import BaseModel, Field, field_validator, EmailStr
 
-from backend.domain.models import UserRole, PaymentStatus
+from backend.domain.models import UserRole, PaymentStatus, SemesterType
 
 
 # ============== Utilities ==============
@@ -143,8 +143,8 @@ class FacultyResponse(BaseModel):
 class GroupCreate(BaseModel):
     """Schema for creating a student group."""
     name: str = Field(..., min_length=1, max_length=50)
-    faculty_id: int
-    course: int = Field(..., ge=1, le=6)
+    faculty_id: Optional[int] = None  # Optional now
+    course: Optional[int] = Field(None, ge=1, le=6)
 
     @field_validator('name')
     @classmethod
@@ -169,8 +169,8 @@ class GroupResponse(BaseModel):
     """Student group response schema."""
     id: int
     name: str
-    faculty_id: int
-    course: int
+    faculty_id: Optional[int]
+    course: Optional[int]
     is_active: bool
     created_at: datetime
 
@@ -180,7 +180,69 @@ class GroupResponse(BaseModel):
 
 class GroupWithFacultyResponse(GroupResponse):
     """Group response with faculty info."""
-    faculty: FacultyResponse
+    faculty: Optional[FacultyResponse]
+
+
+# ============== Payment Settings Schemas ==============
+
+class PaymentSettingsCreate(BaseModel):
+    """Schema for creating payment settings."""
+    academic_year: str = Field(..., pattern=r'^\d{4}-\d{4}$')  # "2024-2025"
+    currency: str = Field(default="RUB", max_length=10)
+    fall_amount: Decimal = Field(..., gt=0)
+    spring_amount: Decimal = Field(..., gt=0)
+
+    @field_validator('academic_year')
+    @classmethod
+    def validate_year(cls, v):
+        years = v.split('-')
+        if int(years[1]) != int(years[0]) + 1:
+            raise ValueError("Academic year must be consecutive years")
+        return v
+
+
+class PaymentSettingsUpdate(BaseModel):
+    """Schema for updating payment settings."""
+    currency: Optional[str] = Field(None, max_length=10)
+    fall_amount: Optional[Decimal] = Field(None, gt=0)
+    spring_amount: Optional[Decimal] = Field(None, gt=0)
+    is_active: Optional[bool] = None
+
+
+class PaymentSettingsResponse(BaseModel):
+    """Payment settings response schema."""
+    id: int
+    academic_year: str
+    currency: str
+    fall_amount: Decimal
+    spring_amount: Decimal
+    total_year_amount: Decimal
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ============== App Settings Schemas ==============
+
+class AppSettingUpdate(BaseModel):
+    """Schema for updating app settings."""
+    value: Optional[str] = None
+    description: Optional[str] = Field(None, max_length=200)
+
+
+class AppSettingResponse(BaseModel):
+    """App setting response schema."""
+    id: int
+    key: str
+    value: Optional[str]
+    description: Optional[str]
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 # ============== Payer Schemas ==============
@@ -192,15 +254,17 @@ class PayerCreate(BaseModel):
     middle_name: Optional[str] = Field(None, max_length=100)
     email: Optional[EmailStr] = None
     phone: Optional[str] = Field(None, max_length=20)
-    faculty_id: int
+    telegram: Optional[str] = Field(None, max_length=100)
+    vk: Optional[str] = Field(None, max_length=100)
+    faculty_id: Optional[int] = None  # Optional now
     group_id: Optional[int] = None
-    student_id: Optional[str] = Field(None, max_length=20)
+    course: Optional[int] = Field(None, ge=1, le=6)
     status: PaymentStatus = PaymentStatus.UNPAID
     membership_start: Optional[date] = None
     membership_end: Optional[date] = None
     notes: Optional[str] = None
 
-    @field_validator('last_name', 'first_name', 'middle_name', 'student_id', 'notes')
+    @field_validator('last_name', 'first_name', 'middle_name', 'notes', 'telegram', 'vk')
     @classmethod
     def sanitize_fields(cls, v):
         return sanitize_string(v) if v else v
@@ -218,16 +282,18 @@ class PayerUpdate(BaseModel):
     middle_name: Optional[str] = Field(None, max_length=100)
     email: Optional[EmailStr] = None
     phone: Optional[str] = Field(None, max_length=20)
+    telegram: Optional[str] = Field(None, max_length=100)
+    vk: Optional[str] = Field(None, max_length=100)
     faculty_id: Optional[int] = None
     group_id: Optional[int] = None
-    student_id: Optional[str] = Field(None, max_length=20)
+    course: Optional[int] = Field(None, ge=1, le=6)
     status: Optional[PaymentStatus] = None
     membership_start: Optional[date] = None
     membership_end: Optional[date] = None
     is_active: Optional[bool] = None
     notes: Optional[str] = None
 
-    @field_validator('last_name', 'first_name', 'middle_name', 'student_id', 'notes')
+    @field_validator('last_name', 'first_name', 'middle_name', 'notes', 'telegram', 'vk')
     @classmethod
     def sanitize_fields(cls, v):
         return sanitize_string(v) if v else v
@@ -247,9 +313,11 @@ class PayerResponse(BaseModel):
     full_name: str
     email: Optional[str]
     phone: Optional[str]
-    faculty_id: int
+    telegram: Optional[str]
+    vk: Optional[str]
+    faculty_id: Optional[int]
     group_id: Optional[int]
-    student_id: Optional[str]
+    course: Optional[int]
     status: PaymentStatus
     membership_start: Optional[date]
     membership_end: Optional[date]
@@ -267,7 +335,7 @@ class PayerListResponse(BaseModel):
     """Payer list item (simplified)."""
     id: int
     full_name: str
-    faculty_id: int
+    faculty_id: Optional[int]
     group_id: Optional[int]
     status: PaymentStatus
     total_paid: Decimal
@@ -278,7 +346,7 @@ class PayerListResponse(BaseModel):
 
 class PayerWithDetailsResponse(PayerResponse):
     """Payer response with faculty and group details."""
-    faculty: FacultyResponse
+    faculty: Optional[FacultyResponse]
     group: Optional[GroupResponse]
     payments: List["PaymentResponse"] = []
 
@@ -290,8 +358,10 @@ class PaymentCreate(BaseModel):
     payer_id: int
     amount: Decimal = Field(..., gt=0)
     payment_date: date
-    period_start: date
-    period_end: date
+    academic_year: Optional[str] = Field(None, pattern=r'^\d{4}-\d{4}$')
+    semester: Optional[SemesterType] = None
+    period_start: Optional[date] = None  # Legacy, optional
+    period_end: Optional[date] = None    # Legacy, optional
     receipt_number: Optional[str] = Field(None, max_length=50)
     payment_method: Optional[str] = Field(None, max_length=50)
     notes: Optional[str] = None
@@ -306,6 +376,8 @@ class PaymentUpdate(BaseModel):
     """Schema for updating a payment."""
     amount: Optional[Decimal] = Field(None, gt=0)
     payment_date: Optional[date] = None
+    academic_year: Optional[str] = Field(None, pattern=r'^\d{4}-\d{4}$')
+    semester: Optional[SemesterType] = None
     period_start: Optional[date] = None
     period_end: Optional[date] = None
     receipt_number: Optional[str] = Field(None, max_length=50)
@@ -324,8 +396,10 @@ class PaymentResponse(BaseModel):
     payer_id: int
     amount: Decimal
     payment_date: date
-    period_start: date
-    period_end: date
+    academic_year: Optional[str]
+    semester: Optional[SemesterType]
+    period_start: Optional[date]
+    period_end: Optional[date]
     receipt_number: Optional[str]
     payment_method: Optional[str]
     notes: Optional[str]

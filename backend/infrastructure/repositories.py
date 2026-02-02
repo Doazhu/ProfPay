@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from backend.domain.models import (
     SystemUser, Faculty, StudentGroup, Payer, Payment, AuditLog,
-    PaymentStatus
+    PaymentStatus, PaymentSettings, AppSettings
 )
 
 
@@ -78,6 +78,14 @@ class FacultyRepository:
         self.db.refresh(faculty)
         return faculty
 
+    def delete(self, faculty_id: int) -> bool:
+        faculty = self.get_by_id(faculty_id)
+        if faculty:
+            faculty.is_active = False  # Soft delete
+            self.db.commit()
+            return True
+        return False
+
 
 class GroupRepository:
     """Repository for StudentGroup operations."""
@@ -110,6 +118,14 @@ class GroupRepository:
         self.db.commit()
         self.db.refresh(group)
         return group
+
+    def delete(self, group_id: int) -> bool:
+        group = self.get_by_id(group_id)
+        if group:
+            group.is_active = False  # Soft delete
+            self.db.commit()
+            return True
+        return False
 
 
 class PayerRepository:
@@ -157,8 +173,9 @@ class PayerRepository:
                 or_(
                     Payer.last_name.ilike(search_term),
                     Payer.first_name.ilike(search_term),
-                    Payer.student_id.ilike(search_term),
-                    Payer.email.ilike(search_term)
+                    Payer.middle_name.ilike(search_term),
+                    Payer.email.ilike(search_term),
+                    Payer.phone.ilike(search_term)
                 )
             )
 
@@ -261,6 +278,79 @@ class PaymentRepository:
             Payment.payer_id == payer_id
         ).scalar()
         return result or Decimal("0")
+
+
+class PaymentSettingsRepository:
+    """Repository for PaymentSettings operations."""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def get_by_id(self, settings_id: int) -> Optional[PaymentSettings]:
+        return self.db.query(PaymentSettings).filter(PaymentSettings.id == settings_id).first()
+
+    def get_by_year(self, academic_year: str) -> Optional[PaymentSettings]:
+        return self.db.query(PaymentSettings).filter(
+            PaymentSettings.academic_year == academic_year
+        ).first()
+
+    def get_current(self) -> Optional[PaymentSettings]:
+        """Get the current active payment settings."""
+        return self.db.query(PaymentSettings).filter(
+            PaymentSettings.is_active == True
+        ).order_by(PaymentSettings.academic_year.desc()).first()
+
+    def get_all(self, active_only: bool = False) -> List[PaymentSettings]:
+        query = self.db.query(PaymentSettings)
+        if active_only:
+            query = query.filter(PaymentSettings.is_active == True)
+        return query.order_by(PaymentSettings.academic_year.desc()).all()
+
+    def create(self, settings: PaymentSettings) -> PaymentSettings:
+        self.db.add(settings)
+        self.db.commit()
+        self.db.refresh(settings)
+        return settings
+
+    def update(self, settings: PaymentSettings) -> PaymentSettings:
+        self.db.commit()
+        self.db.refresh(settings)
+        return settings
+
+    def delete(self, settings_id: int) -> bool:
+        settings = self.get_by_id(settings_id)
+        if settings:
+            self.db.delete(settings)
+            self.db.commit()
+            return True
+        return False
+
+
+class AppSettingsRepository:
+    """Repository for AppSettings operations."""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def get_by_key(self, key: str) -> Optional[AppSettings]:
+        return self.db.query(AppSettings).filter(AppSettings.key == key).first()
+
+    def get_all(self) -> List[AppSettings]:
+        return self.db.query(AppSettings).order_by(AppSettings.key).all()
+
+    def set(self, key: str, value: str, description: str = None) -> AppSettings:
+        """Set a setting value, creating it if it doesn't exist."""
+        setting = self.get_by_key(key)
+        if setting:
+            setting.value = value
+            if description:
+                setting.description = description
+        else:
+            setting = AppSettings(key=key, value=value, description=description)
+            self.db.add(setting)
+        self.db.commit()
+        self.db.refresh(setting)
+        return setting
 
 
 class StatsRepository:

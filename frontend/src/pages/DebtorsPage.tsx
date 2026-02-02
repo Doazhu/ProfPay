@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import type { Payer, Faculty, PaymentStatus } from '../types';
-import { payerApi, facultyApi } from '../services/api';
+import type { Payer, Faculty, StudentGroup, PaymentStatus } from '../types';
+import { payerApi, facultyApi, groupApi } from '../services/api';
 
 // Status Badge Component
 function StatusBadge({ status }: { status: PaymentStatus }) {
@@ -19,6 +19,7 @@ function StatusBadge({ status }: { status: PaymentStatus }) {
 export default function DebtorsPage() {
   const [debtors, setDebtors] = useState<Payer[]>([]);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
+  const [groups, setGroups] = useState<StudentGroup[]>([]);
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
@@ -29,19 +30,23 @@ export default function DebtorsPage() {
   const facultyId = searchParams.get('faculty') ? parseInt(searchParams.get('faculty')!) : undefined;
 
   useEffect(() => {
-    loadFaculties();
+    loadFilters();
   }, []);
 
   useEffect(() => {
     loadDebtors();
   }, [page, facultyId]);
 
-  const loadFaculties = async () => {
+  const loadFilters = async () => {
     try {
-      const data = await facultyApi.getAll();
-      setFaculties(data);
+      const [facultyData, groupData] = await Promise.all([
+        facultyApi.getAll(),
+        groupApi.getAll(),
+      ]);
+      setFaculties(facultyData);
+      setGroups(groupData);
     } catch (error) {
-      console.error('Failed to load faculties:', error);
+      console.error('Failed to load filters:', error);
     }
   };
 
@@ -82,6 +87,19 @@ export default function DebtorsPage() {
       currency: 'RUB',
       minimumFractionDigits: 0,
     }).format(amount);
+  };
+
+  // Get faculty/group names for display
+  const getFacultyName = (id: number | null) => {
+    if (!id) return '—';
+    const faculty = faculties.find(f => f.id === id);
+    return faculty?.short_name || faculty?.name || '—';
+  };
+
+  const getGroupName = (id: number | null) => {
+    if (!id) return '';
+    const group = groups.find(g => g.id === id);
+    return group?.name || '';
   };
 
   return (
@@ -190,18 +208,19 @@ export default function DebtorsPage() {
                       >
                         {debtor.full_name}
                       </Link>
-                      {debtor.student_id && (
-                        <p className="text-xs text-accent">{debtor.student_id}</p>
+                      {debtor.course && (
+                        <p className="text-xs text-accent">{debtor.course} курс</p>
                       )}
                     </td>
                     <td className="py-3 px-4 text-sm">
                       {debtor.phone && <p className="text-accent">{debtor.phone}</p>}
                       {debtor.email && <p className="text-accent">{debtor.email}</p>}
-                      {!debtor.phone && !debtor.email && <p className="text-accent">-</p>}
+                      {debtor.telegram && <p className="text-accent">{debtor.telegram}</p>}
+                      {!debtor.phone && !debtor.email && !debtor.telegram && <p className="text-accent">—</p>}
                     </td>
                     <td className="py-3 px-4 text-accent">
-                      {debtor.faculty_id}
-                      {debtor.group_id && ` / ${debtor.group_id}`}
+                      {getFacultyName(debtor.faculty_id)}
+                      {debtor.group_id && ` / ${getGroupName(debtor.group_id)}`}
                     </td>
                     <td className="py-3 px-4">
                       <StatusBadge status={debtor.status} />

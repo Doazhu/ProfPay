@@ -31,6 +31,12 @@ class PaymentStatus(str, enum.Enum):
     EXEMPT = "exempt"         # Exempt from payment
 
 
+class SemesterType(str, enum.Enum):
+    """Semester type."""
+    FALL = "fall"       # Осенний семестр
+    SPRING = "spring"   # Весенний семестр
+
+
 class SystemUser(Base):
     """System user for authentication."""
     __tablename__ = "system_users"
@@ -74,8 +80,8 @@ class StudentGroup(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(50), nullable=False)
-    faculty_id = Column(Integer, ForeignKey("faculties.id"), nullable=False)
-    course = Column(Integer, nullable=False)  # 1-6 course
+    faculty_id = Column(Integer, ForeignKey("faculties.id"), nullable=True)  # Optional now
+    course = Column(Integer, nullable=True)  # 1-6 course, optional
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, server_default=func.now())
 
@@ -92,6 +98,42 @@ class StudentGroup(Base):
         return f"<StudentGroup {self.name}>"
 
 
+class PaymentSettings(Base):
+    """Payment settings for years and semesters."""
+    __tablename__ = "payment_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    academic_year = Column(String(9), nullable=False, unique=True)  # "2024-2025"
+    currency = Column(String(10), default="RUB")
+    fall_amount = Column(Numeric(10, 2), nullable=False)  # Осенний семестр
+    spring_amount = Column(Numeric(10, 2), nullable=False)  # Весенний семестр
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    @property
+    def total_year_amount(self) -> Decimal:
+        """Total amount for the year."""
+        return (self.fall_amount or Decimal("0")) + (self.spring_amount or Decimal("0"))
+
+    def __repr__(self):
+        return f"<PaymentSettings {self.academic_year}>"
+
+
+class AppSettings(Base):
+    """Application-wide settings."""
+    __tablename__ = "app_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(50), unique=True, nullable=False)
+    value = Column(Text, nullable=True)
+    description = Column(String(200), nullable=True)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    def __repr__(self):
+        return f"<AppSettings {self.key}={self.value}>"
+
+
 class Payer(Base):
     """Trade union payer (student/employee)."""
     __tablename__ = "payers"
@@ -106,11 +148,13 @@ class Payer(Base):
     # Contact info
     email = Column(String(100), nullable=True)
     phone = Column(String(20), nullable=True)
+    telegram = Column(String(100), nullable=True)  # Telegram username
+    vk = Column(String(100), nullable=True)  # VK link
 
-    # University info
-    faculty_id = Column(Integer, ForeignKey("faculties.id"), nullable=False)
+    # University info - all optional now
+    faculty_id = Column(Integer, ForeignKey("faculties.id"), nullable=True)  # Optional
     group_id = Column(Integer, ForeignKey("student_groups.id"), nullable=True)
-    student_id = Column(String(20), nullable=True, index=True)  # Student ID number
+    course = Column(Integer, nullable=True)  # Course year (1-6)
 
     # Payment status
     status = Column(Enum(PaymentStatus), default=PaymentStatus.UNPAID, nullable=False, index=True)
@@ -166,8 +210,14 @@ class Payment(Base):
     # Payment details
     amount = Column(Numeric(10, 2), nullable=False)
     payment_date = Column(Date, nullable=False, index=True)
-    period_start = Column(Date, nullable=False)  # Payment period start
-    period_end = Column(Date, nullable=False)    # Payment period end
+
+    # Semester info
+    academic_year = Column(String(9), nullable=True)  # "2024-2025"
+    semester = Column(Enum(SemesterType), nullable=True)  # fall/spring
+
+    # Legacy period fields (optional, for backwards compatibility)
+    period_start = Column(Date, nullable=True)
+    period_end = Column(Date, nullable=True)
 
     # Optional info
     receipt_number = Column(String(50), nullable=True)
@@ -183,7 +233,7 @@ class Payment(Base):
 
     # Index for period queries
     __table_args__ = (
-        Index("ix_payments_period", "period_start", "period_end"),
+        Index("ix_payments_academic_year", "academic_year", "semester"),
     )
 
     def __repr__(self):

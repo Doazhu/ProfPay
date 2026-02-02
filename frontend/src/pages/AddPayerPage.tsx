@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Faculty, StudentGroup, PayerCreate, PaymentStatus } from '../types';
+import type { Faculty, StudentGroup, PayerCreate } from '../types';
 import { payerApi, facultyApi, groupApi } from '../services/api';
 
 export default function AddPayerPage() {
@@ -18,22 +18,23 @@ export default function AddPayerPage() {
     middle_name: '',
     email: '',
     phone: '',
-    faculty_id: 0,
+    telegram: '',
+    vk: '',
+    faculty_id: undefined,
     group_id: undefined,
-    student_id: '',
+    course: undefined,
     status: 'unpaid',
     notes: '',
   });
 
   useEffect(() => {
     loadFaculties();
+    loadAllGroups();
   }, []);
 
   useEffect(() => {
     if (formData.faculty_id) {
       loadGroups(formData.faculty_id);
-    } else {
-      setGroups([]);
     }
   }, [formData.faculty_id]);
 
@@ -43,6 +44,15 @@ export default function AddPayerPage() {
       setFaculties(data);
     } catch (error) {
       console.error('Failed to load faculties:', error);
+    }
+  };
+
+  const loadAllGroups = async () => {
+    try {
+      const data = await groupApi.getAll();
+      setGroups(data);
+    } catch (error) {
+      console.error('Failed to load groups:', error);
     }
   };
 
@@ -73,8 +83,9 @@ export default function AddPayerPage() {
     try {
       const payer = await payerApi.create({
         ...formData,
-        faculty_id: Number(formData.faculty_id),
+        faculty_id: formData.faculty_id ? Number(formData.faculty_id) : undefined,
         group_id: formData.group_id ? Number(formData.group_id) : undefined,
+        course: formData.course ? Number(formData.course) : undefined,
       });
       navigate(`/payers/${payer.id}`);
     } catch (err: unknown) {
@@ -176,6 +187,32 @@ export default function AddPayerPage() {
                 placeholder="+7 (999) 123-45-67"
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-accent mb-1">
+                Telegram
+              </label>
+              <input
+                type="text"
+                name="telegram"
+                value={formData.telegram || ''}
+                onChange={handleChange}
+                className="input"
+                placeholder="@username"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-accent mb-1">
+                VK
+              </label>
+              <input
+                type="text"
+                name="vk"
+                value={formData.vk || ''}
+                onChange={handleChange}
+                className="input"
+                placeholder="vk.com/username"
+              />
+            </div>
           </div>
         </div>
 
@@ -185,16 +222,15 @@ export default function AddPayerPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-accent mb-1">
-                Факультет *
+                Факультет
               </label>
               <select
                 name="faculty_id"
                 value={formData.faculty_id || ''}
                 onChange={handleChange}
                 className="input"
-                required
               >
-                <option value="">Выберите факультет</option>
+                <option value="">Не указан</option>
                 {faculties.map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.name}
@@ -211,28 +247,30 @@ export default function AddPayerPage() {
                 value={formData.group_id || ''}
                 onChange={handleChange}
                 className="input"
-                disabled={!formData.faculty_id}
               >
-                <option value="">Выберите группу</option>
+                <option value="">Не указана</option>
                 {groups.map((g) => (
                   <option key={g.id} value={g.id}>
-                    {g.name} ({g.course} курс)
+                    {g.name} {g.course ? `(${g.course} курс)` : ''}
                   </option>
                 ))}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-accent mb-1">
-                Номер студенческого билета
+                Курс
               </label>
-              <input
-                type="text"
-                name="student_id"
-                value={formData.student_id || ''}
+              <select
+                name="course"
+                value={formData.course || ''}
                 onChange={handleChange}
                 className="input"
-                placeholder="2024-001234"
-              />
+              >
+                <option value="">Не указан</option>
+                {[1, 2, 3, 4, 5, 6].map((c) => (
+                  <option key={c} value={c}>{c} курс</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-accent mb-1">

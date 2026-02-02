@@ -108,6 +108,12 @@ async def health_check():
     return {"status": "healthy"}
 
 
+@app.get("/api/v1/health")
+async def api_health_check():
+    """Health check endpoint for API monitoring."""
+    return {"status": "healthy", "version": settings.APP_VERSION}
+
+
 if __name__ == "__main__":
     uvicorn.run(
         "backend.main:app",

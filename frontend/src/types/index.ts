@@ -15,6 +15,9 @@ export interface User {
 // Payment status
 export type PaymentStatus = 'paid' | 'partial' | 'unpaid' | 'exempt';
 
+// Semester type
+export type SemesterType = 'fall' | 'spring';
+
 // Faculty
 export interface Faculty {
   id: number;
@@ -28,11 +31,24 @@ export interface Faculty {
 export interface StudentGroup {
   id: number;
   name: string;
-  faculty_id: number;
-  course: number;
+  faculty_id: number | null;
+  course: number | null;
   is_active: boolean;
   created_at: string;
   faculty?: Faculty;
+}
+
+// Payment Settings
+export interface PaymentSettings {
+  id: number;
+  academic_year: string;
+  currency: string;
+  fall_amount: number;
+  spring_amount: number;
+  total_year_amount: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 // Payer
@@ -44,9 +60,11 @@ export interface Payer {
   full_name: string;
   email: string | null;
   phone: string | null;
-  faculty_id: number;
+  telegram: string | null;
+  vk: string | null;
+  faculty_id: number | null;
   group_id: number | null;
-  student_id: string | null;
+  course: number | null;
   status: PaymentStatus;
   membership_start: string | null;
   membership_end: string | null;
@@ -66,8 +84,10 @@ export interface Payment {
   payer_id: number;
   amount: number;
   payment_date: string;
-  period_start: string;
-  period_end: string;
+  academic_year: string | null;
+  semester: SemesterType | null;
+  period_start: string | null;
+  period_end: string | null;
   receipt_number: string | null;
   payment_method: string | null;
   notes: string | null;
@@ -129,9 +149,11 @@ export interface PayerCreate {
   middle_name?: string;
   email?: string;
   phone?: string;
-  faculty_id: number;
+  telegram?: string;
+  vk?: string;
+  faculty_id?: number;
   group_id?: number;
-  student_id?: string;
+  course?: number;
   status?: PaymentStatus;
   membership_start?: string;
   membership_end?: string;
@@ -142,9 +164,29 @@ export interface PaymentCreate {
   payer_id: number;
   amount: number;
   payment_date: string;
-  period_start: string;
-  period_end: string;
+  academic_year?: string;
+  semester?: SemesterType;
+  period_start?: string;
+  period_end?: string;
   receipt_number?: string;
   payment_method?: string;
   notes?: string;
+}
+
+export interface PaymentSettingsCreate {
+  academic_year: string;
+  currency?: string;
+  fall_amount: number;
+  spring_amount: number;
+}
+
+export interface GroupCreate {
+  name: string;
+  faculty_id?: number;
+  course?: number;
+}
+
+export interface FacultyCreate {
+  name: string;
+  short_name?: string;
 }

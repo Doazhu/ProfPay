@@ -13,13 +13,14 @@ from backend.application.schemas import (
     PaymentCreate, PaymentUpdate, PaymentResponse,
     FacultyCreate, FacultyUpdate, FacultyResponse,
     GroupCreate, GroupUpdate, GroupResponse,
+    PaymentSettingsCreate, PaymentSettingsUpdate, PaymentSettingsResponse,
     PaginatedResponse
 )
 from backend.domain.models import (
-    SystemUser, Payer, Payment, Faculty, StudentGroup, PaymentStatus
+    SystemUser, Payer, Payment, Faculty, StudentGroup, PaymentStatus, PaymentSettings
 )
 from backend.infrastructure.repositories import (
-    PayerRepository, PaymentRepository, FacultyRepository, GroupRepository
+    PayerRepository, PaymentRepository, FacultyRepository, GroupRepository, PaymentSettingsRepository
 )
 from backend.presentation.dependencies import (
     get_current_user, require_operator, require_any_role
@@ -84,6 +85,24 @@ async def update_faculty(
     return faculty_repo.update(faculty)
 
 
+@router.delete("/faculties/{faculty_id}")
+async def delete_faculty(
+    faculty_id: int,
+    db: Session = Depends(get_db),
+    current_user: SystemUser = Depends(require_operator)
+):
+    """Soft delete a faculty."""
+    faculty_repo = FacultyRepository(db)
+
+    if not faculty_repo.delete(faculty_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Faculty not found"
+        )
+
+    return {"message": "Faculty deleted successfully"}
+
+
 # ============== Group Endpoints ==============
 
 @router.get("/groups", response_model=list[GroupResponse])
@@ -110,8 +129,8 @@ async def create_group(
     group_repo = GroupRepository(db)
     faculty_repo = FacultyRepository(db)
 
-    # Validate faculty exists
-    if not faculty_repo.get_by_id(group_data.faculty_id):
+    # Validate faculty exists if provided
+    if group_data.faculty_id and not faculty_repo.get_by_id(group_data.faculty_id):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Faculty not found"
@@ -154,6 +173,137 @@ async def update_group(
     return group_repo.update(group)
 
 
+@router.delete("/groups/{group_id}")
+async def delete_group(
+    group_id: int,
+    db: Session = Depends(get_db),
+    current_user: SystemUser = Depends(require_operator)
+):
+    """Soft delete a group."""
+    group_repo = GroupRepository(db)
+
+    if not group_repo.delete(group_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Group not found"
+        )
+
+    return {"message": "Group deleted successfully"}
+
+
+# ============== Payment Settings Endpoints ==============
+
+@router.get("/payment-settings", response_model=list[PaymentSettingsResponse])
+async def list_payment_settings(
+    db: Session = Depends(get_db),
+    current_user: SystemUser = Depends(require_any_role)
+):
+    """Get all payment settings."""
+    settings_repo = PaymentSettingsRepository(db)
+    return settings_repo.get_all()
+
+
+@router.get("/payment-settings/current", response_model=PaymentSettingsResponse)
+async def get_current_payment_settings(
+    db: Session = Depends(get_db),
+    current_user: SystemUser = Depends(require_any_role)
+):
+    """Get current active payment settings."""
+    settings_repo = PaymentSettingsRepository(db)
+    settings = settings_repo.get_current()
+
+    if not settings:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active payment settings found"
+        )
+
+    return settings
+
+
+@router.post("/payment-settings", response_model=PaymentSettingsResponse)
+async def create_payment_settings(
+    settings_data: PaymentSettingsCreate,
+    db: Session = Depends(get_db),
+    current_user: SystemUser = Depends(require_operator)
+):
+    """Create new payment settings for an academic year."""
+    settings_repo = PaymentSettingsRepository(db)
+
+    # Check if settings for this year already exist
+    existing = settings_repo.get_by_year(settings_data.academic_year)
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Payment settings for {settings_data.academic_year} already exist"
+        )
+
+    settings = PaymentSettings(
+        academic_year=settings_data.academic_year,
+        currency=settings_data.currency,
+        fall_amount=settings_data.fall_amount,
+        spring_amount=settings_data.spring_amount
+    )
+    created = settings_repo.create(settings)
+
+    return {
+        **created.__dict__,
+        "total_year_amount": created.total_year_amount
+    }
+
+
+@router.put("/payment-settings/{settings_id}", response_model=PaymentSettingsResponse)
+async def update_payment_settings(
+    settings_id: int,
+    settings_data: PaymentSettingsUpdate,
+    db: Session = Depends(get_db),
+    current_user: SystemUser = Depends(require_operator)
+):
+    """Update payment settings."""
+    settings_repo = PaymentSettingsRepository(db)
+    settings = settings_repo.get_by_id(settings_id)
+
+    if not settings:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Payment settings not found"
+        )
+
+    if settings_data.currency is not None:
+        settings.currency = settings_data.currency
+    if settings_data.fall_amount is not None:
+        settings.fall_amount = settings_data.fall_amount
+    if settings_data.spring_amount is not None:
+        settings.spring_amount = settings_data.spring_amount
+    if settings_data.is_active is not None:
+        settings.is_active = settings_data.is_active
+
+    updated = settings_repo.update(settings)
+
+    return {
+        **updated.__dict__,
+        "total_year_amount": updated.total_year_amount
+    }
+
+
+@router.delete("/payment-settings/{settings_id}")
+async def delete_payment_settings(
+    settings_id: int,
+    db: Session = Depends(get_db),
+    current_user: SystemUser = Depends(require_operator)
+):
+    """Delete payment settings."""
+    settings_repo = PaymentSettingsRepository(db)
+
+    if not settings_repo.delete(settings_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Payment settings not found"
+        )
+
+    return {"message": "Payment settings deleted successfully"}
+
+
 # ============== Payer Endpoints ==============
 
 @router.get("/payers", response_model=PaginatedResponse)
@@ -191,9 +341,11 @@ async def list_payers(
             "full_name": payer.full_name,
             "email": payer.email,
             "phone": payer.phone,
+            "telegram": payer.telegram,
+            "vk": payer.vk,
             "faculty_id": payer.faculty_id,
             "group_id": payer.group_id,
-            "student_id": payer.student_id,
+            "course": payer.course,
             "status": payer.status,
             "membership_start": payer.membership_start,
             "membership_end": payer.membership_end,
@@ -245,8 +397,8 @@ async def create_payer(
     faculty_repo = FacultyRepository(db)
     group_repo = GroupRepository(db)
 
-    # Validate faculty exists
-    if not faculty_repo.get_by_id(payer_data.faculty_id):
+    # Validate faculty exists if provided
+    if payer_data.faculty_id and not faculty_repo.get_by_id(payer_data.faculty_id):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Faculty not found"
@@ -265,9 +417,11 @@ async def create_payer(
         middle_name=payer_data.middle_name,
         email=payer_data.email,
         phone=payer_data.phone,
+        telegram=payer_data.telegram,
+        vk=payer_data.vk,
         faculty_id=payer_data.faculty_id,
         group_id=payer_data.group_id,
-        student_id=payer_data.student_id,
+        course=payer_data.course,
         status=payer_data.status,
         membership_start=payer_data.membership_start,
         membership_end=payer_data.membership_end,
@@ -364,9 +518,11 @@ async def list_debtors(
             "full_name": payer.full_name,
             "email": payer.email,
             "phone": payer.phone,
+            "telegram": payer.telegram,
+            "vk": payer.vk,
             "faculty_id": payer.faculty_id,
             "group_id": payer.group_id,
-            "student_id": payer.student_id,
+            "course": payer.course,
             "status": payer.status,
             "membership_start": payer.membership_start,
             "membership_end": payer.membership_end,
@@ -430,6 +586,8 @@ async def create_payment(
         payer_id=payment_data.payer_id,
         amount=payment_data.amount,
         payment_date=payment_data.payment_date,
+        academic_year=payment_data.academic_year,
+        semester=payment_data.semester,
         period_start=payment_data.period_start,
         period_end=payment_data.period_end,
         receipt_number=payment_data.receipt_number,
