@@ -6,64 +6,102 @@
   body {
     @apply bg-light text-dark antialiased;
     font-family: 'Rubik', system-ui, -apple-system, sans-serif;
+    /* Prevent horizontal scroll on mobile */
+    overflow-x: hidden;
   }
 
   h1, h2, h3, h4, h5, h6 {
     font-family: 'JetBrains Mono', monospace;
   }
 
-  /* Smooth scroll for better UX */
+  /* Smooth scroll for better UX (disabled on mobile for performance) */
+  @media (min-width: 768px) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
+
+  /* Ensure minimum font size for readability on mobile */
   html {
-    scroll-behavior: smooth;
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
   }
 }
 
 @layer components {
   /* ========================================
+     TOUCH TARGET - Minimum 44x44px for accessibility
+     ======================================== */
+  .touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* ========================================
      BUTTONS - Soft, springy micro-interactions
      ======================================== */
   .btn {
-    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium
+    @apply inline-flex items-center justify-center px-4 py-2.5 rounded-lg font-medium
            transition-all duration-200 ease-out
            focus:outline-none focus:ring-2 focus:ring-offset-2
            active:scale-[0.98]
            disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:transform-none disabled:active:scale-100;
     will-change: transform, box-shadow;
+    min-height: 44px; /* Touch target */
   }
 
   .btn-primary {
     @apply btn bg-primary text-white
            hover:bg-primary-dark hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/25
+           active:translate-y-0 active:shadow-md
            focus:ring-primary;
   }
 
   .btn-secondary {
     @apply btn bg-secondary text-white
            hover:bg-secondary-dark hover:-translate-y-0.5 hover:shadow-lg hover:shadow-secondary/25
+           active:translate-y-0 active:shadow-md
            focus:ring-secondary;
   }
 
   .btn-outline {
     @apply btn border-2 border-accent text-accent
            hover:bg-accent hover:text-white hover:-translate-y-0.5 hover:shadow-md
+           active:translate-y-0
            focus:ring-accent;
   }
 
   .btn-ghost {
     @apply btn text-accent
            hover:bg-light-dark hover:-translate-y-0.5
+           active:translate-y-0 active:bg-light-darker
            focus:ring-accent;
+  }
+
+  /* Small button variant for pagination etc - still touch friendly on mobile */
+  .btn-sm {
+    @apply px-3 py-1.5 text-sm;
+    min-height: 36px;
+  }
+
+  @media (max-width: 767px) {
+    .btn-sm {
+      min-height: 44px;
+      @apply px-4 py-2;
+    }
   }
 
   /* ========================================
      INPUTS - Soft focus glow
      ======================================== */
   .input {
-    @apply w-full px-4 py-2 border border-light-darker rounded-lg bg-white
+    @apply w-full px-4 py-2.5 border border-light-darker rounded-lg bg-white
            transition-all duration-200 ease-out
            hover:border-primary/40
            focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary focus:shadow-sm focus:shadow-primary/10
            disabled:bg-light disabled:cursor-not-allowed disabled:hover:border-light-darker;
+    min-height: 44px; /* Touch target */
+    font-size: 16px; /* Prevent iOS zoom on focus */
   }
 
   .input-error {
@@ -76,37 +114,48 @@
      CARDS - Subtle lift on hover
      ======================================== */
   .card {
-    @apply bg-white rounded-xl shadow-sm border border-light-dark p-6
+    @apply bg-white rounded-xl shadow-sm border border-light-dark p-4 md:p-6
            transition-all duration-300 ease-out;
   }
 
   .card-interactive {
     @apply card cursor-pointer
-           hover:-translate-y-1 hover:shadow-lg hover:border-primary/20;
+           hover:-translate-y-1 hover:shadow-lg hover:border-primary/20
+           active:translate-y-0 active:shadow-md;
   }
 
   /* ========================================
      BADGES - Micro scale on hover
      ======================================== */
   .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium
            transition-transform duration-150 ease-out;
   }
 
   .badge-success {
-    @apply badge bg-green-100 text-green-800 hover:scale-105;
+    @apply badge bg-green-100 text-green-800;
   }
 
   .badge-warning {
-    @apply badge bg-yellow-100 text-yellow-800 hover:scale-105;
+    @apply badge bg-yellow-100 text-yellow-800;
   }
 
   .badge-danger {
-    @apply badge bg-red-100 text-red-800 hover:scale-105;
+    @apply badge bg-red-100 text-red-800;
   }
 
   .badge-info {
-    @apply badge bg-blue-100 text-blue-800 hover:scale-105;
+    @apply badge bg-blue-100 text-blue-800;
+  }
+
+  /* Hover scale only on non-touch devices */
+  @media (hover: hover) {
+    .badge-success:hover,
+    .badge-warning:hover,
+    .badge-danger:hover,
+    .badge-info:hover {
+      @apply scale-105;
+    }
   }
 
   /* ========================================
@@ -115,22 +164,43 @@
   .sidebar-link {
     @apply flex items-center gap-3 px-4 py-3 rounded-lg text-accent
            transition-all duration-200 ease-out
-           hover:bg-light-dark hover:text-dark hover:translate-x-1;
+           hover:bg-light-dark hover:text-dark
+           active:bg-light-darker;
+    min-height: 48px; /* Touch target */
+  }
+
+  /* Only slide on non-touch devices */
+  @media (hover: hover) {
+    .sidebar-link:hover {
+      @apply translate-x-1;
+    }
   }
 
   .sidebar-link-active {
     @apply flex items-center gap-3 px-4 py-3 rounded-lg
            bg-primary text-white
            transition-all duration-200 ease-out
-           hover:bg-primary-dark hover:text-white;
+           hover:bg-primary-dark hover:text-white
+           active:bg-primary-dark;
+    min-height: 48px; /* Touch target */
   }
 
   /* ========================================
      TABLE ROWS - Smooth hover highlight
      ======================================== */
   .table-row-interactive {
-    @apply transition-colors duration-150 ease-out cursor-pointer
-           hover:bg-light-dark/50;
+    @apply transition-colors duration-150 ease-out cursor-pointer;
+  }
+
+  @media (hover: hover) {
+    .table-row-interactive:hover {
+      @apply bg-light-dark/50;
+    }
+  }
+
+  /* Active state for touch */
+  .table-row-interactive:active {
+    @apply bg-light-dark/70;
   }
 
   /* ========================================
@@ -143,6 +213,17 @@
   .spinner-container {
     @apply flex items-center justify-center;
     animation: fadeIn 200ms ease-out;
+  }
+
+  /* ========================================
+     MOBILE TABLE HELPER - Hide columns on mobile
+     ======================================== */
+  .table-col-mobile-hidden {
+    @apply hidden sm:table-cell;
+  }
+
+  .table-col-tablet-hidden {
+    @apply hidden md:table-cell;
   }
 }
 
@@ -220,6 +301,40 @@
   .animate-scale-in {
     animation: scaleIn 200ms ease-out;
   }
+
+  /* ========================================
+     FADE IN UP ANIMATION (for hero/login)
+     ======================================== */
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in-up {
+    animation: fadeInUp 400ms ease-out;
+  }
+}
+
+/* ========================================
+   MOBILE OPTIMIZATIONS
+   ======================================== */
+
+/* Prevent text selection on interactive elements */
+@media (max-width: 767px) {
+  .btn,
+  .sidebar-link,
+  .sidebar-link-active,
+  .card-interactive {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 
 /* ========================================
@@ -239,11 +354,27 @@
   .card,
   .card-interactive,
   .sidebar-link,
-  .badge {
+  .sidebar-link-active,
+  .badge,
+  .table-row-interactive {
     transform: none !important;
   }
 
   html {
     scroll-behavior: auto;
+  }
+
+  /* Keep functional transitions like menu open/close */
+  aside {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ========================================
+   SAFE AREA INSETS (for notched devices)
+   ======================================== */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }

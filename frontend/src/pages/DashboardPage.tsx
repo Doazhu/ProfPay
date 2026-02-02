@@ -25,12 +25,12 @@ function StatCard({ title, value, subtitle, color, icon }: StatCardProps) {
   return (
     <div className="card-interactive">
       <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm text-accent font-medium">{title}</p>
-          <p className="text-3xl font-bold text-dark mt-2">{value}</p>
-          {subtitle && <p className="text-sm text-accent mt-1">{subtitle}</p>}
+        <div className="min-w-0 flex-1">
+          <p className="text-xs md:text-sm text-accent font-medium">{title}</p>
+          <p className="text-xl md:text-2xl lg:text-3xl font-bold text-dark mt-1 md:mt-2 truncate">{value}</p>
+          {subtitle && <p className="text-xs md:text-sm text-accent mt-1">{subtitle}</p>}
         </div>
-        <div className={`p-3 rounded-lg transition-transform duration-200 group-hover:scale-110 ${colorClasses[color]}`}>
+        <div className={`p-2 md:p-3 rounded-lg transition-transform duration-200 group-hover:scale-110 flex-shrink-0 ${colorClasses[color]}`}>
           {icon}
         </div>
       </div>
@@ -40,25 +40,25 @@ function StatCard({ title, value, subtitle, color, icon }: StatCardProps) {
 
 // Icons
 const UsersIcon = () => (
-  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
   </svg>
 );
 
 const MoneyIcon = () => (
-  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
 
 const CheckIcon = () => (
-  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
 
 const AlertIcon = () => (
-  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
   </svg>
 );
@@ -95,6 +95,17 @@ export default function DashboardPage() {
     }).format(amount);
   };
 
+  // Compact money format for mobile
+  const formatMoneyCompact = (amount: number) => {
+    if (amount >= 1000000) {
+      return `${(amount / 1000000).toFixed(1)}М ₽`;
+    }
+    if (amount >= 1000) {
+      return `${(amount / 1000).toFixed(0)}К ₽`;
+    }
+    return formatMoney(amount);
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64 animate-fade-in">
@@ -106,13 +117,13 @@ export default function DashboardPage() {
   return (
     <div className="animate-fade-in">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-dark">Панель управления</h1>
+      <div className="mb-6 md:mb-8">
+        <h1 className="text-xl md:text-2xl font-bold text-dark">Панель управления</h1>
         <p className="text-accent mt-1">Обзор статистики по плательщикам</p>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 mb-6 md:mb-8">
         <StatCard
           title="Всего плательщиков"
           value={stats?.total_payers || 0}
@@ -121,7 +132,7 @@ export default function DashboardPage() {
         />
         <StatCard
           title="Собрано средств"
-          value={formatMoney(stats?.total_paid_amount || 0)}
+          value={formatMoneyCompact(stats?.total_paid_amount || 0)}
           color="success"
           icon={<MoneyIcon />}
         />
@@ -141,15 +152,16 @@ export default function DashboardPage() {
       </div>
 
       {/* Faculty Stats */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold text-dark">Статистика по факультетам</h2>
-          <Link to="/reports" className="text-sm text-primary hover:text-primary-dark">
+      <div className="card mb-6 md:mb-8">
+        <div className="flex items-center justify-between mb-4 md:mb-6">
+          <h2 className="text-base md:text-lg font-semibold text-dark">Статистика по факультетам</h2>
+          <Link to="/reports" className="text-sm text-primary hover:text-primary-dark active:text-primary-dark">
             Подробнее
           </Link>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Desktop table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-light-dark">
@@ -175,48 +187,73 @@ export default function DashboardPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden space-y-3">
+          {facultyStats.map((faculty) => (
+            <div key={faculty.faculty_id} className="p-3 bg-light-dark/30 rounded-lg">
+              <p className="font-medium text-dark mb-2">{faculty.faculty_name}</p>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-accent">Всего: </span>
+                  <span className="text-dark">{faculty.total_payers}</span>
+                </div>
+                <div>
+                  <span className="text-accent">Сумма: </span>
+                  <span className="font-medium text-dark">{formatMoneyCompact(faculty.total_amount)}</span>
+                </div>
+                <div>
+                  <span className="text-green-600">Оплатили: {faculty.paid_count}</span>
+                </div>
+                <div>
+                  <span className="text-red-600">Должники: {faculty.unpaid_count}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
         <Link
           to="/payers"
-          className="card-interactive flex items-center gap-4 group"
+          className="card-interactive flex items-center gap-3 md:gap-4 group"
         >
-          <div className="p-3 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-all duration-200">
+          <div className="p-2 md:p-3 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-all duration-200 flex-shrink-0">
             <UsersIcon />
           </div>
-          <div>
+          <div className="min-w-0">
             <h3 className="font-medium text-dark">Все плательщики</h3>
-            <p className="text-sm text-accent">Просмотр и редактирование</p>
+            <p className="text-sm text-accent truncate">Просмотр и редактирование</p>
           </div>
         </Link>
 
         <Link
           to="/debtors"
-          className="card-interactive flex items-center gap-4 group"
+          className="card-interactive flex items-center gap-3 md:gap-4 group"
         >
-          <div className="p-3 rounded-lg bg-red-100 text-red-600 group-hover:bg-red-500 group-hover:text-white transition-all duration-200">
+          <div className="p-2 md:p-3 rounded-lg bg-red-100 text-red-600 group-hover:bg-red-500 group-hover:text-white transition-all duration-200 flex-shrink-0">
             <AlertIcon />
           </div>
-          <div>
+          <div className="min-w-0">
             <h3 className="font-medium text-dark">Список должников</h3>
-            <p className="text-sm text-accent">Неоплаченные взносы</p>
+            <p className="text-sm text-accent truncate">Неоплаченные взносы</p>
           </div>
         </Link>
 
         <Link
           to="/add-payer"
-          className="card-interactive flex items-center gap-4 group"
+          className="card-interactive flex items-center gap-3 md:gap-4 group sm:col-span-2 md:col-span-1"
         >
-          <div className="p-3 rounded-lg bg-secondary/10 text-secondary group-hover:bg-secondary group-hover:text-white transition-all duration-200">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="p-2 md:p-3 rounded-lg bg-secondary/10 text-secondary group-hover:bg-secondary group-hover:text-white transition-all duration-200 flex-shrink-0">
+            <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
           </div>
-          <div>
+          <div className="min-w-0">
             <h3 className="font-medium text-dark">Добавить плательщика</h3>
-            <p className="text-sm text-accent">Регистрация нового члена</p>
+            <p className="text-sm text-accent truncate">Регистрация нового члена</p>
           </div>
         </Link>
       </div>

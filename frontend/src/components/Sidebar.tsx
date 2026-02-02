@@ -45,16 +45,24 @@ const LogoutIcon = () => (
   </svg>
 );
 
+const CloseIcon = () => (
+  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+  </svg>
+);
+
 interface NavItemProps {
   to: string;
   icon: React.ReactNode;
   label: string;
+  onClick?: () => void;
 }
 
-function NavItem({ to, icon, label }: NavItemProps) {
+function NavItem({ to, icon, label, onClick }: NavItemProps) {
   return (
     <NavLink
       to={to}
+      onClick={onClick}
       className={({ isActive }) =>
         isActive ? 'sidebar-link-active' : 'sidebar-link'
       }
@@ -65,62 +73,107 @@ function NavItem({ to, icon, label }: NavItemProps) {
   );
 }
 
-export default function Sidebar() {
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const { user, logout, canEdit, isAdmin } = useAuth();
 
   const handleLogout = async () => {
     await logout();
   };
 
+  const handleNavClick = () => {
+    // Close mobile menu on navigation
+    if (onClose) {
+      onClose();
+    }
+  };
+
   return (
-    <aside className="w-64 bg-white border-r border-light-dark h-screen flex flex-col">
-      {/* Logo */}
-      <div className="p-6 border-b border-light-dark">
-        <h1 className="text-2xl font-bold text-primary">ProfPay</h1>
-        <p className="text-sm text-accent mt-1">Учёт плательщиков</p>
-      </div>
+    <>
+      {/* Mobile overlay */}
+      {isOpen && onClose && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden animate-fade-in"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+      )}
 
-      {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto scrollbar-thin">
-        <NavItem to="/" icon={<HomeIcon />} label="Главная" />
-        <NavItem to="/payers" icon={<UsersIcon />} label="Плательщики" />
-        <NavItem to="/debtors" icon={<AlertIcon />} label="Должники" />
-
-        {canEdit && (
-          <NavItem to="/add-payer" icon={<PlusIcon />} label="Добавить" />
-        )}
-
-        <NavItem to="/reports" icon={<ChartIcon />} label="Отчёты" />
-
-        {isAdmin && (
-          <NavItem to="/settings" icon={<SettingsIcon />} label="Настройки" />
-        )}
-      </nav>
-
-      {/* User Info */}
-      <div className="p-4 border-t border-light-dark">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-semibold">
-            {user?.full_name?.charAt(0) || 'U'}
+      {/* Sidebar */}
+      <aside
+        className={`
+          fixed md:static inset-y-0 left-0 z-50
+          w-64 bg-white border-r border-light-dark
+          flex flex-col
+          transform transition-transform duration-300 ease-out
+          md:transform-none md:transition-none
+          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+          h-screen md:h-auto md:min-h-screen
+        `}
+      >
+        {/* Logo + Close button on mobile */}
+        <div className="p-4 md:p-6 border-b border-light-dark flex items-center justify-between">
+          <div>
+            <h1 className="text-xl md:text-2xl font-bold text-primary">ProfPay</h1>
+            <p className="text-xs md:text-sm text-accent mt-1">Учёт плательщиков</p>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-dark truncate">
-              {user?.full_name || 'Пользователь'}
-            </p>
-            <p className="text-xs text-accent capitalize">
-              {user?.role === 'admin' ? 'Администратор' :
-               user?.role === 'operator' ? 'Оператор' : 'Просмотр'}
-            </p>
-          </div>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="md:hidden p-2 -mr-2 rounded-lg text-accent hover:bg-light-dark active:bg-light-darker touch-target"
+              aria-label="Закрыть меню"
+            >
+              <CloseIcon />
+            </button>
+          )}
         </div>
-        <button
-          onClick={handleLogout}
-          className="sidebar-link w-full text-red-600 hover:bg-red-50 hover:text-red-700"
-        >
-          <LogoutIcon />
-          <span>Выйти</span>
-        </button>
-      </div>
-    </aside>
+
+        {/* Navigation */}
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto scrollbar-thin">
+          <NavItem to="/" icon={<HomeIcon />} label="Главная" onClick={handleNavClick} />
+          <NavItem to="/payers" icon={<UsersIcon />} label="Плательщики" onClick={handleNavClick} />
+          <NavItem to="/debtors" icon={<AlertIcon />} label="Должники" onClick={handleNavClick} />
+
+          {canEdit && (
+            <NavItem to="/add-payer" icon={<PlusIcon />} label="Добавить" onClick={handleNavClick} />
+          )}
+
+          <NavItem to="/reports" icon={<ChartIcon />} label="Отчёты" onClick={handleNavClick} />
+
+          {isAdmin && (
+            <NavItem to="/settings" icon={<SettingsIcon />} label="Настройки" onClick={handleNavClick} />
+          )}
+        </nav>
+
+        {/* User Info */}
+        <div className="p-4 border-t border-light-dark">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-semibold flex-shrink-0">
+              {user?.full_name?.charAt(0) || 'U'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-dark truncate">
+                {user?.full_name || 'Пользователь'}
+              </p>
+              <p className="text-xs text-accent capitalize">
+                {user?.role === 'admin' ? 'Администратор' :
+                 user?.role === 'operator' ? 'Оператор' : 'Просмотр'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="sidebar-link w-full text-red-600 hover:bg-red-50 hover:text-red-700 active:bg-red-100"
+          >
+            <LogoutIcon />
+            <span>Выйти</span>
+          </button>
+        </div>
+      </aside>
+    </>
   );
 }

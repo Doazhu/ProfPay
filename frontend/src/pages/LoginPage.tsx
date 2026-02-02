@@ -30,17 +30,17 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-light px-4">
+    <div className="min-h-screen flex items-center justify-center bg-light px-4 py-8">
       <div className="w-full max-w-md animate-fade-in-up">
         {/* Logo */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-primary">ProfPay</h1>
-          <p className="text-accent mt-2">Система учёта плательщиков Профкома</p>
+        <div className="text-center mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-4xl font-bold text-primary">ProfPay</h1>
+          <p className="text-accent mt-2 text-sm md:text-base">Система учёта плательщиков Профкома</p>
         </div>
 
         {/* Login Form */}
         <div className="card">
-          <h2 className="text-xl font-semibold text-dark mb-6">Вход в систему</h2>
+          <h2 className="text-lg md:text-xl font-semibold text-dark mb-6">Вход в систему</h2>
 
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm animate-scale-in">

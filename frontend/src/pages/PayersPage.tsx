@@ -136,13 +136,13 @@ export default function PayersPage() {
   return (
     <div className="animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-dark">Плательщики</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-dark">Плательщики</h1>
           <p className="text-accent mt-1">Всего: {total} записей</p>
         </div>
         {canEdit && (
-          <Link to="/add-payer" className="btn-primary">
+          <Link to="/add-payer" className="btn-primary w-full sm:w-auto justify-center">
             + Добавить
           </Link>
         )}
@@ -150,9 +150,9 @@ export default function PayersPage() {
 
       {/* Filters */}
       <div className="card mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
           {/* Search */}
-          <div className="lg:col-span-2">
+          <div className="sm:col-span-2 lg:col-span-2">
             <input
               type="text"
               placeholder="Поиск по ФИО, email, телефону..."
@@ -219,75 +219,106 @@ export default function PayersPage() {
             <p>Плательщики не найдены</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-light-dark/50">
-                  <th className="text-left py-3 px-4 text-sm font-medium text-accent">ФИО</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-accent">Факультет</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-accent">Группа</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-accent">Курс</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-accent">Статус</th>
-                  <th className="text-right py-3 px-4 text-sm font-medium text-accent">Оплачено</th>
-                  <th className="text-right py-3 px-4 text-sm font-medium text-accent">Действия</th>
-                </tr>
-              </thead>
-              <tbody>
-                {payers.map((payer) => (
-                  <tr key={payer.id} className="border-b border-light-dark last:border-0 table-row-interactive">
-                    <td className="py-3 px-4">
-                      <Link
-                        to={`/payers/${payer.id}`}
-                        className="text-dark hover:text-primary font-medium transition-colors duration-150"
-                      >
-                        {payer.full_name}
-                      </Link>
-                      {payer.email && (
-                        <p className="text-xs text-accent">{payer.email}</p>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-accent">{getFacultyName(payer.faculty_id)}</td>
-                    <td className="py-3 px-4 text-accent">{getGroupName(payer.group_id)}</td>
-                    <td className="py-3 px-4 text-accent">{payer.course || '—'}</td>
-                    <td className="py-3 px-4">
-                      <StatusBadge status={payer.status} />
-                    </td>
-                    <td className="py-3 px-4 text-right font-medium text-dark">
-                      {formatMoney(payer.total_paid)}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <Link
-                        to={`/payers/${payer.id}`}
-                        className="text-primary hover:text-primary-dark text-sm transition-colors duration-150"
-                      >
-                        Подробнее
-                      </Link>
-                    </td>
+          <>
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-light-dark/50">
+                    <th className="text-left py-3 px-4 text-sm font-medium text-accent">ФИО</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-accent">Факультет</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-accent">Группа</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-accent">Курс</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-accent">Статус</th>
+                    <th className="text-right py-3 px-4 text-sm font-medium text-accent">Оплачено</th>
+                    <th className="text-right py-3 px-4 text-sm font-medium text-accent">Действия</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {payers.map((payer) => (
+                    <tr key={payer.id} className="border-b border-light-dark last:border-0 table-row-interactive">
+                      <td className="py-3 px-4">
+                        <Link
+                          to={`/payers/${payer.id}`}
+                          className="text-dark hover:text-primary font-medium transition-colors duration-150"
+                        >
+                          {payer.full_name}
+                        </Link>
+                        {payer.email && (
+                          <p className="text-xs text-accent">{payer.email}</p>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-accent">{getFacultyName(payer.faculty_id)}</td>
+                      <td className="py-3 px-4 text-accent">{getGroupName(payer.group_id)}</td>
+                      <td className="py-3 px-4 text-accent">{payer.course || '—'}</td>
+                      <td className="py-3 px-4">
+                        <StatusBadge status={payer.status} />
+                      </td>
+                      <td className="py-3 px-4 text-right font-medium text-dark">
+                        {formatMoney(payer.total_paid)}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <Link
+                          to={`/payers/${payer.id}`}
+                          className="text-primary hover:text-primary-dark text-sm transition-colors duration-150"
+                        >
+                          Подробнее
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="md:hidden space-y-3">
+              {payers.map((payer) => (
+                <Link
+                  key={payer.id}
+                  to={`/payers/${payer.id}`}
+                  className="block p-4 bg-light-dark/30 rounded-lg active:bg-light-dark/50 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-dark truncate">{payer.full_name}</p>
+                      {payer.email && (
+                        <p className="text-xs text-accent truncate">{payer.email}</p>
+                      )}
+                    </div>
+                    <StatusBadge status={payer.status} />
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-accent">
+                      {getFacultyName(payer.faculty_id)} • {getGroupName(payer.group_id)}
+                      {payer.course && ` • ${payer.course} курс`}
+                    </span>
+                    <span className="font-medium text-dark">{formatMoney(payer.total_paid)}</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </>
         )}
 
         {/* Pagination */}
         {pages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-light-dark">
-            <p className="text-sm text-accent">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-light-dark">
+            <p className="text-sm text-accent order-2 sm:order-1">
               Страница {page} из {pages}
             </p>
-            <div className="flex gap-2">
+            <div className="flex gap-2 order-1 sm:order-2 w-full sm:w-auto">
               <button
                 onClick={() => updateFilter('page', String(page - 1))}
                 disabled={page === 1}
-                className="btn-outline px-3 py-1 text-sm disabled:opacity-50"
+                className="btn-outline btn-sm flex-1 sm:flex-none justify-center disabled:opacity-50"
               >
                 Назад
               </button>
               <button
                 onClick={() => updateFilter('page', String(page + 1))}
                 disabled={page === pages}
-                className="btn-outline px-3 py-1 text-sm disabled:opacity-50"
+                className="btn-outline btn-sm flex-1 sm:flex-none justify-center disabled:opacity-50"
               >
                 Вперёд
               </button>

@@ -102,15 +102,18 @@ export default function DebtorsPage() {
     return group?.name || '';
   };
 
+  const unpaidCount = debtors.filter(d => d.status === 'unpaid').length;
+  const partialCount = debtors.filter(d => d.status === 'partial').length;
+
   return (
     <div className="animate-fade-in">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-dark flex items-center gap-2">
-          <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <h1 className="text-xl md:text-2xl font-bold text-dark flex items-center gap-2">
+          <svg className="w-6 h-6 md:w-8 md:h-8 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
-          Должники
+          <span>Должники</span>
         </h1>
         <p className="text-accent mt-1">
           Плательщики с неоплаченными или частично оплаченными взносами: {total}
@@ -119,12 +122,12 @@ export default function DebtorsPage() {
 
       {/* Filter */}
       <div className="card mb-6">
-        <div className="flex items-center gap-4">
-          <label className="text-sm text-accent">Фильтр по факультету:</label>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+          <label className="text-sm text-accent whitespace-nowrap">Фильтр по факультету:</label>
           <select
             value={facultyId || ''}
             onChange={(e) => updateFilter('faculty', e.target.value)}
-            className="input max-w-xs"
+            className="input sm:max-w-xs"
           >
             <option value="">Все факультеты</option>
             {faculties.map((f) => (
@@ -137,34 +140,34 @@ export default function DebtorsPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 mb-6">
         <div className="card bg-red-50 border-red-200">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-lg bg-red-100">
-              <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="flex items-center gap-3 md:gap-4">
+            <div className="p-2 md:p-3 rounded-lg bg-red-100 flex-shrink-0">
+              <svg className="w-5 h-5 md:w-6 md:h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </div>
-            <div>
-              <p className="text-sm text-red-600">Не оплачено</p>
-              <p className="text-2xl font-bold text-red-700">
-                {debtors.filter(d => d.status === 'unpaid').length}
+            <div className="min-w-0">
+              <p className="text-xs md:text-sm text-red-600">Не оплачено</p>
+              <p className="text-xl md:text-2xl font-bold text-red-700">
+                {unpaidCount}
               </p>
             </div>
           </div>
         </div>
 
         <div className="card bg-yellow-50 border-yellow-200">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-lg bg-yellow-100">
-              <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="flex items-center gap-3 md:gap-4">
+            <div className="p-2 md:p-3 rounded-lg bg-yellow-100 flex-shrink-0">
+              <svg className="w-5 h-5 md:w-6 md:h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <div>
-              <p className="text-sm text-yellow-600">Частично оплачено</p>
-              <p className="text-2xl font-bold text-yellow-700">
-                {debtors.filter(d => d.status === 'partial').length}
+            <div className="min-w-0">
+              <p className="text-xs md:text-sm text-yellow-600">Частично</p>
+              <p className="text-xl md:text-2xl font-bold text-yellow-700">
+                {partialCount}
               </p>
             </div>
           </div>
@@ -186,81 +189,130 @@ export default function DebtorsPage() {
             <p className="text-accent mt-1">Все плательщики оплатили взносы</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-red-50">
-                  <th className="text-left py-3 px-4 text-sm font-medium text-red-800">ФИО</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-red-800">Контакты</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-red-800">Факультет/Группа</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-red-800">Статус</th>
-                  <th className="text-right py-3 px-4 text-sm font-medium text-red-800">Оплачено</th>
-                  <th className="text-right py-3 px-4 text-sm font-medium text-red-800">Действия</th>
-                </tr>
-              </thead>
-              <tbody>
-                {debtors.map((debtor) => (
-                  <tr key={debtor.id} className="border-b border-light-dark last:border-0 transition-colors duration-150 hover:bg-red-50/50">
-                    <td className="py-3 px-4">
+          <>
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-red-50">
+                    <th className="text-left py-3 px-4 text-sm font-medium text-red-800">ФИО</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-red-800">Контакты</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-red-800">Факультет/Группа</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-red-800">Статус</th>
+                    <th className="text-right py-3 px-4 text-sm font-medium text-red-800">Оплачено</th>
+                    <th className="text-right py-3 px-4 text-sm font-medium text-red-800">Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {debtors.map((debtor) => (
+                    <tr key={debtor.id} className="border-b border-light-dark last:border-0 transition-colors duration-150 hover:bg-red-50/50">
+                      <td className="py-3 px-4">
+                        <Link
+                          to={`/payers/${debtor.id}`}
+                          className="text-dark hover:text-primary font-medium transition-colors duration-150"
+                        >
+                          {debtor.full_name}
+                        </Link>
+                        {debtor.course && (
+                          <p className="text-xs text-accent">{debtor.course} курс</p>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-sm">
+                        {debtor.phone && <p className="text-accent">{debtor.phone}</p>}
+                        {debtor.email && <p className="text-accent">{debtor.email}</p>}
+                        {debtor.telegram && <p className="text-accent">{debtor.telegram}</p>}
+                        {!debtor.phone && !debtor.email && !debtor.telegram && <p className="text-accent">—</p>}
+                      </td>
+                      <td className="py-3 px-4 text-accent">
+                        {getFacultyName(debtor.faculty_id)}
+                        {debtor.group_id && ` / ${getGroupName(debtor.group_id)}`}
+                      </td>
+                      <td className="py-3 px-4">
+                        <StatusBadge status={debtor.status} />
+                      </td>
+                      <td className="py-3 px-4 text-right font-medium text-dark">
+                        {formatMoney(debtor.total_paid)}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <Link
+                          to={`/payers/${debtor.id}`}
+                          className="btn-primary btn-sm"
+                        >
+                          Внести платёж
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="md:hidden space-y-3">
+              {debtors.map((debtor) => (
+                <div
+                  key={debtor.id}
+                  className="p-4 bg-red-50/50 rounded-lg border border-red-100"
+                >
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="min-w-0 flex-1">
                       <Link
                         to={`/payers/${debtor.id}`}
-                        className="text-dark hover:text-primary font-medium transition-colors duration-150"
+                        className="font-medium text-dark hover:text-primary transition-colors"
                       >
                         {debtor.full_name}
                       </Link>
-                      {debtor.course && (
-                        <p className="text-xs text-accent">{debtor.course} курс</p>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-sm">
-                      {debtor.phone && <p className="text-accent">{debtor.phone}</p>}
-                      {debtor.email && <p className="text-accent">{debtor.email}</p>}
-                      {debtor.telegram && <p className="text-accent">{debtor.telegram}</p>}
-                      {!debtor.phone && !debtor.email && !debtor.telegram && <p className="text-accent">—</p>}
-                    </td>
-                    <td className="py-3 px-4 text-accent">
-                      {getFacultyName(debtor.faculty_id)}
-                      {debtor.group_id && ` / ${getGroupName(debtor.group_id)}`}
-                    </td>
-                    <td className="py-3 px-4">
-                      <StatusBadge status={debtor.status} />
-                    </td>
-                    <td className="py-3 px-4 text-right font-medium text-dark">
-                      {formatMoney(debtor.total_paid)}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <Link
-                        to={`/payers/${debtor.id}`}
-                        className="btn-primary px-3 py-1 text-sm"
-                      >
-                        Внести платёж
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      <p className="text-xs text-accent mt-0.5">
+                        {getFacultyName(debtor.faculty_id)}
+                        {debtor.group_id && ` / ${getGroupName(debtor.group_id)}`}
+                        {debtor.course && ` • ${debtor.course} курс`}
+                      </p>
+                    </div>
+                    <StatusBadge status={debtor.status} />
+                  </div>
+
+                  {/* Contacts */}
+                  {(debtor.phone || debtor.email || debtor.telegram) && (
+                    <div className="text-sm text-accent mb-3 space-y-0.5">
+                      {debtor.phone && <p>{debtor.phone}</p>}
+                      {debtor.email && <p className="truncate">{debtor.email}</p>}
+                      {debtor.telegram && <p>{debtor.telegram}</p>}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-dark">{formatMoney(debtor.total_paid)}</span>
+                    <Link
+                      to={`/payers/${debtor.id}`}
+                      className="btn-primary btn-sm"
+                    >
+                      Внести платёж
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
 
         {/* Pagination */}
         {pages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-light-dark">
-            <p className="text-sm text-accent">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-light-dark">
+            <p className="text-sm text-accent order-2 sm:order-1">
               Страница {page} из {pages}
             </p>
-            <div className="flex gap-2">
+            <div className="flex gap-2 order-1 sm:order-2 w-full sm:w-auto">
               <button
                 onClick={() => updateFilter('page', String(page - 1))}
                 disabled={page === 1}
-                className="btn-outline px-3 py-1 text-sm disabled:opacity-50"
+                className="btn-outline btn-sm flex-1 sm:flex-none justify-center disabled:opacity-50"
               >
                 Назад
               </button>
               <button
                 onClick={() => updateFilter('page', String(page + 1))}
                 disabled={page === pages}
-                className="btn-outline px-3 py-1 text-sm disabled:opacity-50"
+                className="btn-outline btn-sm flex-1 sm:flex-none justify-center disabled:opacity-50"
               >
                 Вперёд
               </button>

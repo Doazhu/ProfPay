@@ -260,51 +260,51 @@ export default function SettingsPage() {
     <div className="animate-fade-in">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-dark">Настройки системы</h1>
+        <h1 className="text-xl md:text-2xl font-bold text-dark">Настройки системы</h1>
         <p className="text-accent mt-1">Управление справочниками и настройками</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-6">
         <button
           onClick={() => setActiveTab('faculties')}
-          className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+          className={`px-3 md:px-4 py-2 rounded-lg font-medium text-sm md:text-base transition-all duration-200 ${
             activeTab === 'faculties'
               ? 'bg-primary text-white shadow-md shadow-primary/25'
-              : 'bg-light-dark text-accent hover:bg-light-darker hover:-translate-y-0.5'
+              : 'bg-light-dark text-accent hover:bg-light-darker active:bg-light-darker'
           }`}
         >
           Факультеты
         </button>
         <button
           onClick={() => setActiveTab('groups')}
-          className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+          className={`px-3 md:px-4 py-2 rounded-lg font-medium text-sm md:text-base transition-all duration-200 ${
             activeTab === 'groups'
               ? 'bg-primary text-white shadow-md shadow-primary/25'
-              : 'bg-light-dark text-accent hover:bg-light-darker hover:-translate-y-0.5'
+              : 'bg-light-dark text-accent hover:bg-light-darker active:bg-light-darker'
           }`}
         >
           Группы
         </button>
         <button
           onClick={() => setActiveTab('payment')}
-          className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+          className={`px-3 md:px-4 py-2 rounded-lg font-medium text-sm md:text-base transition-all duration-200 ${
             activeTab === 'payment'
               ? 'bg-primary text-white shadow-md shadow-primary/25'
-              : 'bg-light-dark text-accent hover:bg-light-darker hover:-translate-y-0.5'
+              : 'bg-light-dark text-accent hover:bg-light-darker active:bg-light-darker'
           }`}
         >
-          Оплата по семестрам
+          Оплата
         </button>
       </div>
 
       {/* Faculties Tab */}
       {activeTab === 'faculties' && (
         <div className="card animate-fade-in-fast">
-          <h2 className="text-lg font-semibold text-dark mb-4">Факультеты</h2>
+          <h2 className="text-base md:text-lg font-semibold text-dark mb-4">Факультеты</h2>
 
           {/* Add Faculty Form */}
-          <div className="flex gap-2 mb-4">
+          <div className="flex flex-col sm:flex-row gap-2 mb-4">
             <input
               type="text"
               value={newFacultyName}
@@ -317,9 +317,9 @@ export default function SettingsPage() {
               value={newFacultyShort}
               onChange={(e) => setNewFacultyShort(e.target.value)}
               placeholder="Сокр."
-              className="input w-24"
+              className="input w-full sm:w-24"
             />
-            <button onClick={handleAddFaculty} className="btn-primary px-4">
+            <button onClick={handleAddFaculty} className="btn-primary w-full sm:w-auto justify-center">
               + Добавить
             </button>
           </div>
@@ -334,7 +334,7 @@ export default function SettingsPage() {
                 }`}
               >
                 {editingFacultyId === faculty.id ? (
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <input
                       type="text"
                       value={editFacultyName}
@@ -345,24 +345,26 @@ export default function SettingsPage() {
                       type="text"
                       value={editFacultyShort}
                       onChange={(e) => setEditFacultyShort(e.target.value)}
-                      className="input w-24"
+                      className="input w-full sm:w-24"
                     />
-                    <button onClick={handleSaveFaculty} className="btn-primary px-3">
-                      Сохранить
-                    </button>
-                    <button onClick={() => setEditingFacultyId(null)} className="btn-ghost px-3">
-                      Отмена
-                    </button>
+                    <div className="flex gap-2">
+                      <button onClick={handleSaveFaculty} className="btn-primary flex-1 sm:flex-none justify-center">
+                        Сохранить
+                      </button>
+                      <button onClick={() => setEditingFacultyId(null)} className="btn-ghost flex-1 sm:flex-none justify-center">
+                        Отмена
+                      </button>
+                    </div>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-dark">{faculty.name}</p>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium text-dark truncate">{faculty.name}</p>
                       {faculty.short_name && (
                         <p className="text-sm text-accent">{faculty.short_name}</p>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className={`text-xs px-2 py-1 rounded ${
                         faculty.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                       }`}>
@@ -370,17 +372,17 @@ export default function SettingsPage() {
                       </span>
                       <button
                         onClick={() => handleEditFaculty(faculty)}
-                        className="text-primary hover:text-primary-dark text-sm"
+                        className="text-primary hover:text-primary-dark active:text-primary-dark text-sm py-1"
                       >
                         Изменить
                       </button>
                       <button
                         onClick={() => handleToggleFacultyActive(faculty)}
-                        className={`text-sm ${
+                        className={`text-sm py-1 ${
                           faculty.is_active ? 'text-red-600 hover:text-red-700' : 'text-green-600 hover:text-green-700'
                         }`}
                       >
-                        {faculty.is_active ? 'Деактивировать' : 'Активировать'}
+                        {faculty.is_active ? 'Деактив.' : 'Активир.'}
                       </button>
                     </div>
                   </div>
@@ -394,7 +396,7 @@ export default function SettingsPage() {
       {/* Groups Tab */}
       {activeTab === 'groups' && (
         <div className="card animate-fade-in-fast">
-          <h2 className="text-lg font-semibold text-dark mb-4">Группы</h2>
+          <h2 className="text-base md:text-lg font-semibold text-dark mb-4">Группы</h2>
 
           {/* Faculty filter */}
           <div className="mb-4">
@@ -411,11 +413,11 @@ export default function SettingsPage() {
           </div>
 
           {/* Add Group Form */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 md:p-4 mb-4">
             <p className="text-sm text-blue-800 mb-3">
               <strong>Важно:</strong> Для создания группы необходимо выбрать факультет выше
             </p>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
                 value={newGroupName}
@@ -427,7 +429,7 @@ export default function SettingsPage() {
               <select
                 value={newGroupCourse || ''}
                 onChange={(e) => setNewGroupCourse(e.target.value ? Number(e.target.value) : undefined)}
-                className="input w-28"
+                className="input w-full sm:w-28"
                 disabled={!selectedFacultyId}
               >
                 <option value="">Курс</option>
@@ -435,9 +437,9 @@ export default function SettingsPage() {
                   <option key={c} value={c}>{c} курс</option>
                 ))}
               </select>
-              <button 
-                onClick={handleAddGroup} 
-                className="btn-primary px-4"
+              <button
+                onClick={handleAddGroup}
+                className="btn-primary w-full sm:w-auto justify-center"
                 disabled={!selectedFacultyId}
               >
                 + Добавить
@@ -446,7 +448,7 @@ export default function SettingsPage() {
           </div>
 
           {/* Group List */}
-          <div className="space-y-2 max-h-96 overflow-y-auto">
+          <div className="space-y-2 max-h-80 md:max-h-96 overflow-y-auto scrollbar-thin">
             {filteredGroups.length === 0 ? (
               <p className="text-center text-accent py-4">Нет групп</p>
             ) : (
@@ -458,7 +460,7 @@ export default function SettingsPage() {
                   }`}
                 >
                   {editingGroupId === group.id ? (
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <input
                         type="text"
                         value={editGroupName}
@@ -468,30 +470,32 @@ export default function SettingsPage() {
                       <select
                         value={editGroupCourse || ''}
                         onChange={(e) => setEditGroupCourse(e.target.value ? Number(e.target.value) : undefined)}
-                        className="input w-28"
+                        className="input w-full sm:w-28"
                       >
                         <option value="">Курс</option>
                         {[1, 2, 3, 4, 5, 6].map((c) => (
                           <option key={c} value={c}>{c} курс</option>
                         ))}
                       </select>
-                      <button onClick={handleSaveGroup} className="btn-primary px-3">
-                        Сохранить
-                      </button>
-                      <button onClick={() => setEditingGroupId(null)} className="btn-ghost px-3">
-                        Отмена
-                      </button>
+                      <div className="flex gap-2">
+                        <button onClick={handleSaveGroup} className="btn-primary flex-1 sm:flex-none justify-center">
+                          Сохранить
+                        </button>
+                        <button onClick={() => setEditingGroupId(null)} className="btn-ghost flex-1 sm:flex-none justify-center">
+                          Отмена
+                        </button>
+                      </div>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-between">
-                      <div>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="min-w-0">
                         <p className="font-medium text-dark">{group.name}</p>
-                        <p className="text-sm text-accent">
+                        <p className="text-sm text-accent truncate">
                           {group.faculty?.short_name || group.faculty?.name || 'Факультет не указан'}
                           {group.course && ` • ${group.course} курс`}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className={`text-xs px-2 py-1 rounded ${
                           group.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                         }`}>
@@ -499,17 +503,17 @@ export default function SettingsPage() {
                         </span>
                         <button
                           onClick={() => handleEditGroup(group)}
-                          className="text-primary hover:text-primary-dark text-sm"
+                          className="text-primary hover:text-primary-dark active:text-primary-dark text-sm py-1"
                         >
                           Изменить
                         </button>
                         <button
                           onClick={() => handleToggleGroupActive(group)}
-                          className={`text-sm ${
+                          className={`text-sm py-1 ${
                             group.is_active ? 'text-red-600 hover:text-red-700' : 'text-green-600 hover:text-green-700'
                           }`}
                         >
-                          {group.is_active ? 'Деактивировать' : 'Активировать'}
+                          {group.is_active ? 'Деактив.' : 'Активир.'}
                         </button>
                       </div>
                     </div>
@@ -524,13 +528,13 @@ export default function SettingsPage() {
       {/* Payment Settings Tab */}
       {activeTab === 'payment' && (
         <div className="card animate-fade-in-fast">
-          <h2 className="text-lg font-semibold text-dark mb-4">Настройки оплаты по семестрам</h2>
+          <h2 className="text-base md:text-lg font-semibold text-dark mb-4">Настройки оплаты по семестрам</h2>
           <p className="text-accent text-sm mb-4">
             Укажите сумму оплаты за каждый семестр для каждого учебного года
           </p>
 
           {/* Add Payment Settings Form */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-2 mb-6 p-4 bg-light-dark/30 rounded-lg">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 mb-6 p-3 md:p-4 bg-light-dark/30 rounded-lg">
             <select
               value={newAcademicYear}
               onChange={(e) => setNewAcademicYear(e.target.value)}
@@ -566,7 +570,7 @@ export default function SettingsPage() {
               <option value="USD">USD ($)</option>
               <option value="EUR">EUR (€)</option>
             </select>
-            <button onClick={handleAddPaymentSettings} className="btn-primary">
+            <button onClick={handleAddPaymentSettings} className="btn-primary justify-center">
               + Добавить
             </button>
           </div>
@@ -579,10 +583,10 @@ export default function SettingsPage() {
               paymentSettings.map((settings) => (
                 <div
                   key={settings.id}
-                  className="p-4 rounded-lg border border-light-dark"
+                  className="p-3 md:p-4 rounded-lg border border-light-dark"
                 >
                   {editingSettingsId === settings.id ? (
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                       <div className="font-medium text-dark py-2">
                         {settings.academic_year}
                       </div>
@@ -603,44 +607,45 @@ export default function SettingsPage() {
                         min="0"
                       />
                       <div className="flex gap-2">
-                        <button onClick={handleSavePaymentSettings} className="btn-primary flex-1">
+                        <button onClick={handleSavePaymentSettings} className="btn-primary flex-1 justify-center">
                           Сохранить
                         </button>
-                        <button onClick={() => setEditingSettingsId(null)} className="btn-ghost">
+                        <button onClick={() => setEditingSettingsId(null)} className="btn-ghost justify-center">
                           Отмена
                         </button>
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-between">
-                      <div className="grid grid-cols-4 gap-4 flex-1">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      {/* Mobile: stacked layout */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1">
                         <div>
-                          <p className="text-sm text-accent">Учебный год</p>
+                          <p className="text-xs md:text-sm text-accent">Учебный год</p>
                           <p className="font-semibold text-dark">{settings.academic_year}</p>
                         </div>
                         <div>
-                          <p className="text-sm text-accent">Осенний семестр</p>
+                          <p className="text-xs md:text-sm text-accent">Осенний семестр</p>
                           <p className="font-medium text-dark">{formatMoney(settings.fall_amount)}</p>
                         </div>
                         <div>
-                          <p className="text-sm text-accent">Весенний семестр</p>
+                          <p className="text-xs md:text-sm text-accent">Весенний семестр</p>
                           <p className="font-medium text-dark">{formatMoney(settings.spring_amount)}</p>
                         </div>
                         <div>
-                          <p className="text-sm text-accent">Итого за год</p>
+                          <p className="text-xs md:text-sm text-accent">Итого за год</p>
                           <p className="font-bold text-primary">{formatMoney(settings.total_year_amount)}</p>
                         </div>
                       </div>
-                      <div className="flex gap-2 ml-4">
+                      <div className="flex gap-2 lg:ml-4">
                         <button
                           onClick={() => handleEditPaymentSettings(settings)}
-                          className="text-primary hover:text-primary-dark text-sm"
+                          className="text-primary hover:text-primary-dark active:text-primary-dark text-sm py-1"
                         >
                           Изменить
                         </button>
                         <button
                           onClick={() => handleDeletePaymentSettings(settings.id)}
-                          className="text-red-600 hover:text-red-700 text-sm"
+                          className="text-red-600 hover:text-red-700 active:text-red-700 text-sm py-1"
                         >
                           Удалить
                         </button>
@@ -655,7 +660,7 @@ export default function SettingsPage() {
       )}
 
       {/* Info */}
-      <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+      <div className="mt-6 p-3 md:p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
         <p className="text-sm text-yellow-800">
           <strong>Примечание:</strong> Деактивация факультетов и групп не удаляет связанные данные.
           Неактивные записи не отображаются в выпадающих списках при создании плательщиков.
