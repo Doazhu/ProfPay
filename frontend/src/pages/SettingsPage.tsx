@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import type { Faculty, StudentGroup, PaymentSettings } from '../types';
-import { facultyApi, groupApi, paymentSettingsApi } from '../services/api';
+import type { Faculty, StudentGroup, PaymentSettings, BudgetSettings } from '../types';
+import { facultyApi, groupApi, paymentSettingsApi, budgetSettingsApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function SettingsPage() {
   const { isAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState<'faculties' | 'groups' | 'payment'>('faculties');
+  const [activeTab, setActiveTab] = useState<'faculties' | 'groups' | 'payment' | 'budget'>('faculties');
 
   // Data
   const [faculties, setFaculties] = useState<Faculty[]>([]);
@@ -28,6 +28,14 @@ export default function SettingsPage() {
   const [editGroupName, setEditGroupName] = useState('');
   const [editGroupCourse, setEditGroupCourse] = useState<number | undefined>(undefined);
 
+  // Budget settings
+  const [budgetSettings, setBudgetSettings] = useState<BudgetSettings>({
+    default_budget_percent: '1',
+    default_stipend_amount: '',
+  });
+  const [budgetSaving, setBudgetSaving] = useState(false);
+  const [budgetSaved, setBudgetSaved] = useState(false);
+
   // Payment settings form
   const [newAcademicYear, setNewAcademicYear] = useState('');
   const [newFallAmount, setNewFallAmount] = useState('');
@@ -44,14 +52,16 @@ export default function SettingsPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [facultyData, groupData, settingsData] = await Promise.all([
+      const [facultyData, groupData, settingsData, budgetData] = await Promise.all([
         facultyApi.getAll(false),
         groupApi.getAll(undefined, false),
         paymentSettingsApi.getAll(),
+        budgetSettingsApi.get().catch(() => ({ default_budget_percent: '1', default_stipend_amount: '' })),
       ]);
       setFaculties(facultyData);
       setGroups(groupData);
       setPaymentSettings(settingsData);
+      setBudgetSettings(budgetData);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -295,6 +305,16 @@ export default function SettingsPage() {
           }`}
         >
           Оплата
+        </button>
+        <button
+          onClick={() => setActiveTab('budget')}
+          className={`px-3 md:px-4 py-2 rounded-lg font-medium text-sm md:text-base transition-all duration-200 ${
+            activeTab === 'budget'
+              ? 'bg-primary text-white shadow-md shadow-primary/25'
+              : 'bg-light-dark text-accent hover:bg-light-darker active:bg-light-darker'
+          }`}
+        >
+          Бюджетники
         </button>
       </div>
 
@@ -654,6 +674,86 @@ export default function SettingsPage() {
                   )}
                 </div>
               ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Budget Settings Tab */}
+      {activeTab === 'budget' && (
+        <div className="card animate-fade-in-fast">
+          <h2 className="text-base md:text-lg font-semibold text-dark mb-2">Настройки для бюджетников</h2>
+          <p className="text-accent text-sm mb-6">
+            Шаблонные значения стипендии и процента, которые автоматически подставляются при создании плательщика-бюджетника.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg">
+            <div>
+              <label className="block text-sm font-medium text-accent mb-1">
+                Стипендия по умолчанию
+              </label>
+              <input
+                type="number"
+                value={budgetSettings.default_stipend_amount}
+                onChange={(e) => setBudgetSettings({ ...budgetSettings, default_stipend_amount: e.target.value })}
+                className="input"
+                placeholder="Например: 5000"
+                min="0"
+                step="0.01"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-accent mb-1">
+                Процент по умолчанию (%)
+              </label>
+              <input
+                type="number"
+                value={budgetSettings.default_budget_percent}
+                onChange={(e) => setBudgetSettings({ ...budgetSettings, default_budget_percent: e.target.value })}
+                className="input"
+                placeholder="Например: 1"
+                min="0"
+                max="100"
+                step="0.01"
+              />
+            </div>
+          </div>
+
+          {budgetSettings.default_stipend_amount && budgetSettings.default_budget_percent && (
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg max-w-lg">
+              <p className="text-sm text-blue-800">
+                При стипендии <strong>{budgetSettings.default_stipend_amount} руб.</strong> и проценте <strong>{budgetSettings.default_budget_percent}%</strong>,
+                к оплате: <strong className="text-primary">
+                  {new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 2 }).format(
+                    Math.round(parseFloat(budgetSettings.default_stipend_amount) * parseFloat(budgetSettings.default_budget_percent)) / 100
+                  )}
+                </strong>
+              </p>
+            </div>
+          )}
+
+          <div className="mt-6 flex items-center gap-3">
+            <button
+              onClick={async () => {
+                setBudgetSaving(true);
+                setBudgetSaved(false);
+                try {
+                  await budgetSettingsApi.update(budgetSettings);
+                  setBudgetSaved(true);
+                  setTimeout(() => setBudgetSaved(false), 3000);
+                } catch (error) {
+                  console.error('Failed to save budget settings:', error);
+                } finally {
+                  setBudgetSaving(false);
+                }
+              }}
+              disabled={budgetSaving}
+              className="btn-primary disabled:opacity-50"
+            >
+              {budgetSaving ? 'Сохранение...' : 'Сохранить'}
+            </button>
+            {budgetSaved && (
+              <span className="text-green-600 text-sm animate-fade-in">Сохранено</span>
             )}
           </div>
         </div>

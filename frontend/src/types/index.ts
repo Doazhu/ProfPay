@@ -52,12 +52,20 @@ export interface PaymentSettings {
 }
 
 // Payer
+export interface BudgetSettings {
+  default_budget_percent: string;
+  default_stipend_amount: string;
+}
+
 export interface Payer {
   id: number;
   last_name: string;
   first_name: string;
   middle_name: string | null;
   date_of_birth: string | null;
+  is_budget: boolean;
+  stipend_amount: number | null;
+  budget_percent: number | null;
   full_name: string;
   email: string | null;
   phone: string | null;
@@ -149,6 +157,9 @@ export interface PayerCreate {
   first_name: string;
   middle_name?: string;
   date_of_birth?: string;
+  is_budget?: boolean;
+  stipend_amount?: number;
+  budget_percent?: number;
   email?: string;
   phone?: string;
   telegram?: string;

@@ -1,7 +1,7 @@
-import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect, useMemo, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Faculty, StudentGroup, PayerCreate } from '../types';
-import { payerApi, facultyApi, groupApi } from '../services/api';
+import type { Faculty, StudentGroup, PayerCreate, BudgetSettings } from '../types';
+import { payerApi, facultyApi, groupApi, budgetSettingsApi } from '../services/api';
 
 export default function AddPayerPage() {
   const navigate = useNavigate();
@@ -10,6 +10,26 @@ export default function AddPayerPage() {
   const [groups, setGroups] = useState<StudentGroup[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Budget defaults
+  const [budgetDefaults, setBudgetDefaults] = useState<BudgetSettings>({
+    default_budget_percent: '1',
+    default_stipend_amount: '',
+  });
+
+  // Budget calculator state
+  const [isBudget, setIsBudget] = useState(false);
+  const [stipendAmount, setStipendAmount] = useState('');
+  const [budgetPercent, setBudgetPercent] = useState('');
+
+  const budgetPayment = useMemo(() => {
+    const s = parseFloat(stipendAmount);
+    const p = parseFloat(budgetPercent);
+    if (!isNaN(s) && !isNaN(p) && s > 0 && p > 0) {
+      return Math.round(s * p) / 100;
+    }
+    return 0;
+  }, [stipendAmount, budgetPercent]);
 
   // Form state
   const [formData, setFormData] = useState<PayerCreate>({
@@ -31,6 +51,7 @@ export default function AddPayerPage() {
   useEffect(() => {
     loadFaculties();
     loadAllGroups();
+    loadBudgetDefaults();
   }, []);
 
   useEffect(() => {
@@ -66,6 +87,19 @@ export default function AddPayerPage() {
     }
   };
 
+  const loadBudgetDefaults = async () => {
+    try {
+      const data = await budgetSettingsApi.get();
+      setBudgetDefaults(data);
+      setBudgetPercent(data.default_budget_percent || '1');
+      if (data.default_stipend_amount) {
+        setStipendAmount(data.default_stipend_amount);
+      }
+    } catch (error) {
+      console.error('Failed to load budget defaults:', error);
+    }
+  };
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
@@ -85,6 +119,9 @@ export default function AddPayerPage() {
       const payer = await payerApi.create({
         ...formData,
         date_of_birth: formData.date_of_birth || undefined,
+        is_budget: isBudget,
+        stipend_amount: isBudget && stipendAmount ? Number(stipendAmount) : undefined,
+        budget_percent: isBudget && budgetPercent ? Number(budgetPercent) : undefined,
         faculty_id: formData.faculty_id ? Number(formData.faculty_id) : undefined,
         group_id: formData.group_id ? Number(formData.group_id) : undefined,
         course: formData.course ? Number(formData.course) : undefined,
@@ -303,6 +340,84 @@ export default function AddPayerPage() {
               </select>
             </div>
           </div>
+        </div>
+
+        {/* Budget Student */}
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold text-dark mb-4">Форма обучения</h2>
+          <label className="flex items-center gap-3 cursor-pointer mb-4">
+            <input
+              type="checkbox"
+              checked={isBudget}
+              onChange={(e) => setIsBudget(e.target.checked)}
+              className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+            />
+            <span className="text-dark font-medium">Бюджетник</span>
+            <span className="text-accent text-sm">(учится на бюджетной основе)</span>
+          </label>
+
+          {isBudget && (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg animate-fade-in">
+              <p className="text-sm text-blue-800 mb-3">
+                Бюджетник платит процент от стипендии. Укажите данные или используйте шаблонные значения.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-accent mb-1">
+                    Стипендия
+                  </label>
+                  <input
+                    type="number"
+                    value={stipendAmount}
+                    onChange={(e) => setStipendAmount(e.target.value)}
+                    className="input"
+                    placeholder={budgetDefaults.default_stipend_amount || '0'}
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-accent mb-1">
+                    Процент (%)
+                  </label>
+                  <input
+                    type="number"
+                    value={budgetPercent}
+                    onChange={(e) => setBudgetPercent(e.target.value)}
+                    className="input"
+                    placeholder={budgetDefaults.default_budget_percent || '1'}
+                    min="0"
+                    max="100"
+                    step="0.01"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-accent mb-1">
+                    К оплате
+                  </label>
+                  <div className="input bg-white flex items-center">
+                    <span className={`font-bold text-lg ${budgetPayment > 0 ? 'text-primary' : 'text-accent'}`}>
+                      {budgetPayment > 0
+                        ? new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 2 }).format(budgetPayment)
+                        : '—'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              {budgetDefaults.default_stipend_amount && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStipendAmount(budgetDefaults.default_stipend_amount);
+                    setBudgetPercent(budgetDefaults.default_budget_percent);
+                  }}
+                  className="mt-3 text-sm text-blue-700 hover:text-blue-900 underline"
+                >
+                  Заполнить шаблонными значениями (стипендия: {budgetDefaults.default_stipend_amount} / процент: {budgetDefaults.default_budget_percent}%)
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Notes */}

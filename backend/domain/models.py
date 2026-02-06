@@ -152,6 +152,11 @@ class Payer(Base):
     telegram = Column(String(100), nullable=True)  # Telegram username
     vk = Column(String(100), nullable=True)  # VK link
 
+    # Budget student info
+    is_budget = Column(Boolean, default=False)
+    stipend_amount = Column(Numeric(10, 2), nullable=True)
+    budget_percent = Column(Numeric(5, 2), nullable=True)
+
     # University info - all optional now
     faculty_id = Column(Integer, ForeignKey("faculties.id"), nullable=True)  # Optional
     group_id = Column(Integer, ForeignKey("student_groups.id"), nullable=True)

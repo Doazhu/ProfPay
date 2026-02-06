@@ -11,6 +11,7 @@ import type {
   PaymentCreate,
   PaymentSettings,
   PaymentSettingsCreate,
+  BudgetSettings,
   DashboardStats,
   FacultyStats,
   MonthlyStats,
@@ -161,6 +162,19 @@ export const paymentSettingsApi = {
 
   delete: async (id: number): Promise<void> => {
     await api.delete(`/payment-settings/${id}`);
+  },
+};
+
+// ============== Budget Settings API ==============
+
+export const budgetSettingsApi = {
+  get: async (): Promise<BudgetSettings> => {
+    const { data } = await api.get('/budget-settings');
+    return data;
+  },
+
+  update: async (settings: Partial<BudgetSettings>): Promise<void> => {
+    await api.put('/budget-settings', settings);
   },
 };
 

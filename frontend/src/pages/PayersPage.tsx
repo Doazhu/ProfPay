@@ -244,12 +244,17 @@ export default function PayersPage() {
                   {payers.map((payer) => (
                     <tr key={payer.id} className="border-b border-light-dark last:border-0 table-row-interactive">
                       <td className="py-3 px-4">
-                        <Link
-                          to={`/payers/${payer.id}`}
-                          className="text-dark hover:text-primary font-medium transition-colors duration-150"
-                        >
-                          {payer.full_name}
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          <Link
+                            to={`/payers/${payer.id}`}
+                            className="text-dark hover:text-primary font-medium transition-colors duration-150"
+                          >
+                            {payer.full_name}
+                          </Link>
+                          {payer.is_budget && (
+                            <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium" title="Бюджетник">Б</span>
+                          )}
+                        </div>
                         {payer.email && (
                           <p className="text-xs text-accent">{payer.email}</p>
                         )}
@@ -288,7 +293,12 @@ export default function PayersPage() {
                 >
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium text-dark truncate">{payer.full_name}</p>
+                      <p className="font-medium text-dark truncate">
+                        {payer.full_name}
+                        {payer.is_budget && (
+                          <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">Б</span>
+                        )}
+                      </p>
                       {payer.email && (
                         <p className="text-xs text-accent truncate">{payer.email}</p>
                       )}

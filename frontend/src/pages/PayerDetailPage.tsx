@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import type { Payer, Payment, Faculty, StudentGroup } from '../types';
-import { payerApi, paymentApi, facultyApi, groupApi } from '../services/api';
+import { payerApi, paymentApi, facultyApi, groupApi, budgetSettingsApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
 // Status Badge
@@ -28,6 +28,20 @@ export default function PayerDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
+
+  // Budget calculator
+  const [editIsBudget, setEditIsBudget] = useState(false);
+  const [editStipend, setEditStipend] = useState('');
+  const [editBudgetPercent, setEditBudgetPercent] = useState('');
+
+  const editBudgetPayment = useMemo(() => {
+    const s = parseFloat(editStipend);
+    const p = parseFloat(editBudgetPercent);
+    if (!isNaN(s) && !isNaN(p) && s > 0 && p > 0) {
+      return Math.round(s * p) / 100;
+    }
+    return 0;
+  }, [editStipend, editBudgetPercent]);
 
   // Edit form
   const [editData, setEditData] = useState({
@@ -65,16 +79,21 @@ export default function PayerDetailPage() {
     if (!id) return;
     setIsLoading(true);
     try {
-      const [payerData, paymentsData, facultyData, groupData] = await Promise.all([
+      const [payerData, paymentsData, facultyData, groupData, budgetData] = await Promise.all([
         payerApi.getById(Number(id)),
         paymentApi.getByPayer(Number(id)),
         facultyApi.getAll(false),
         groupApi.getAll(undefined, false),
+        budgetSettingsApi.get().catch(() => ({ default_budget_percent: '1', default_stipend_amount: '' })),
       ]);
       setPayer(payerData);
       setPayments(paymentsData);
       setFaculties(facultyData);
       setGroups(groupData);
+      // Initialize budget edit fields
+      setEditIsBudget(payerData.is_budget);
+      setEditStipend(payerData.stipend_amount ? String(payerData.stipend_amount) : '');
+      setEditBudgetPercent(payerData.budget_percent ? String(payerData.budget_percent) : budgetData.default_budget_percent || '1');
 
       // Initialize edit form
       setEditData({
@@ -104,6 +123,9 @@ export default function PayerDetailPage() {
       const updated = await payerApi.update(Number(id), {
         ...editData,
         date_of_birth: editData.date_of_birth || undefined,
+        is_budget: editIsBudget,
+        stipend_amount: editIsBudget && editStipend ? Number(editStipend) : undefined,
+        budget_percent: editIsBudget && editBudgetPercent ? Number(editBudgetPercent) : undefined,
         faculty_id: editData.faculty_id || undefined,
         group_id: editData.group_id || undefined,
         course: editData.course || undefined,
@@ -282,6 +304,58 @@ export default function PayerDetailPage() {
               />
             </div>
 
+            {/* Budget section */}
+            <div>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editIsBudget}
+                  onChange={(e) => setEditIsBudget(e.target.checked)}
+                  className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <span className="text-dark font-medium">Бюджетник</span>
+              </label>
+              {editIsBudget && (
+                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-sm text-accent mb-1">Стипендия</label>
+                      <input
+                        type="number"
+                        value={editStipend}
+                        onChange={(e) => setEditStipend(e.target.value)}
+                        className="input"
+                        min="0"
+                        step="0.01"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-accent mb-1">Процент (%)</label>
+                      <input
+                        type="number"
+                        value={editBudgetPercent}
+                        onChange={(e) => setEditBudgetPercent(e.target.value)}
+                        className="input"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-accent mb-1">К оплате</label>
+                      <div className="input bg-white flex items-center">
+                        <span className={`font-bold ${editBudgetPayment > 0 ? 'text-primary' : 'text-accent'}`}>
+                          {editBudgetPayment > 0
+                            ? new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 2 }).format(editBudgetPayment)
+                            : '—'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm text-accent mb-1">Email</label>
@@ -427,6 +501,38 @@ export default function PayerDetailPage() {
                 </p>
               </div>
             </div>
+
+            {payer.is_budget && (
+              <div className="col-span-2">
+                <h3 className="text-sm font-medium text-accent mb-3">Бюджетник</h3>
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex flex-wrap gap-6">
+                    <p className="flex items-center gap-2">
+                      <span className="text-accent">Стипендия:</span>
+                      <span className="text-dark font-medium">
+                        {payer.stipend_amount
+                          ? new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 }).format(payer.stipend_amount)
+                          : '—'}
+                      </span>
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <span className="text-accent">Процент:</span>
+                      <span className="text-dark font-medium">{payer.budget_percent ? `${payer.budget_percent}%` : '—'}</span>
+                    </p>
+                    {payer.stipend_amount && payer.budget_percent && (
+                      <p className="flex items-center gap-2">
+                        <span className="text-accent">К оплате:</span>
+                        <span className="text-primary font-bold">
+                          {new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 2 }).format(
+                            Math.round(payer.stipend_amount * payer.budget_percent) / 100
+                          )}
+                        </span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {payer.notes && (
               <div className="col-span-2">

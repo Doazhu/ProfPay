@@ -17,10 +17,11 @@ from backend.application.schemas import (
     PaginatedResponse
 )
 from backend.domain.models import (
-    SystemUser, Payer, Payment, Faculty, StudentGroup, PaymentStatus, PaymentSettings
+    SystemUser, Payer, Payment, Faculty, StudentGroup, PaymentStatus, PaymentSettings, AppSettings
 )
 from backend.infrastructure.repositories import (
-    PayerRepository, PaymentRepository, FacultyRepository, GroupRepository, PaymentSettingsRepository
+    PayerRepository, PaymentRepository, FacultyRepository, GroupRepository,
+    PaymentSettingsRepository, AppSettingsRepository
 )
 from backend.presentation.dependencies import (
     get_current_user, require_operator, require_any_role
@@ -327,6 +328,40 @@ async def delete_payment_settings(
     return {"message": "Payment settings deleted successfully"}
 
 
+# ============== Budget Settings Endpoints ==============
+
+@router.get("/budget-settings")
+async def get_budget_settings(
+    db: Session = Depends(get_db),
+    current_user: SystemUser = Depends(require_any_role)
+):
+    """Get default budget settings (stipend amount and percent)."""
+    repo = AppSettingsRepository(db)
+    percent_setting = repo.get_by_key("default_budget_percent")
+    stipend_setting = repo.get_by_key("default_stipend_amount")
+    return {
+        "default_budget_percent": percent_setting.value if percent_setting else "1",
+        "default_stipend_amount": stipend_setting.value if stipend_setting else "",
+    }
+
+
+@router.put("/budget-settings")
+async def update_budget_settings(
+    settings: dict,
+    db: Session = Depends(get_db),
+    current_user: SystemUser = Depends(require_operator)
+):
+    """Update default budget settings."""
+    repo = AppSettingsRepository(db)
+    if "default_budget_percent" in settings:
+        repo.set("default_budget_percent", str(settings["default_budget_percent"]),
+                  "Процент от стипендии по умолчанию")
+    if "default_stipend_amount" in settings:
+        repo.set("default_stipend_amount", str(settings["default_stipend_amount"]),
+                  "Сумма стипендии по умолчанию")
+    return {"message": "Budget settings updated"}
+
+
 # ============== Payer Endpoints ==============
 
 @router.get("/payers", response_model=PaginatedResponse)
@@ -361,11 +396,15 @@ async def list_payers(
             "last_name": payer.last_name,
             "first_name": payer.first_name,
             "middle_name": payer.middle_name,
+            "date_of_birth": payer.date_of_birth,
             "full_name": payer.full_name,
             "email": payer.email,
             "phone": payer.phone,
             "telegram": payer.telegram,
             "vk": payer.vk,
+            "is_budget": payer.is_budget,
+            "stipend_amount": payer.stipend_amount,
+            "budget_percent": payer.budget_percent,
             "faculty_id": payer.faculty_id,
             "group_id": payer.group_id,
             "course": payer.course,
@@ -438,6 +477,10 @@ async def create_payer(
         last_name=payer_data.last_name,
         first_name=payer_data.first_name,
         middle_name=payer_data.middle_name,
+        date_of_birth=payer_data.date_of_birth,
+        is_budget=payer_data.is_budget,
+        stipend_amount=payer_data.stipend_amount,
+        budget_percent=payer_data.budget_percent,
         email=payer_data.email,
         phone=payer_data.phone,
         telegram=payer_data.telegram,
@@ -538,11 +581,15 @@ async def list_debtors(
             "last_name": payer.last_name,
             "first_name": payer.first_name,
             "middle_name": payer.middle_name,
+            "date_of_birth": payer.date_of_birth,
             "full_name": payer.full_name,
             "email": payer.email,
             "phone": payer.phone,
             "telegram": payer.telegram,
             "vk": payer.vk,
+            "is_budget": payer.is_budget,
+            "stipend_amount": payer.stipend_amount,
+            "budget_percent": payer.budget_percent,
             "faculty_id": payer.faculty_id,
             "group_id": payer.group_id,
             "course": payer.course,
