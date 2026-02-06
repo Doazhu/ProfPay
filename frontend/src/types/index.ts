@@ -57,6 +57,7 @@ export interface Payer {
   last_name: string;
   first_name: string;
   middle_name: string | null;
+  date_of_birth: string | null;
   full_name: string;
   email: string | null;
   phone: string | null;
@@ -147,6 +148,7 @@ export interface PayerCreate {
   last_name: string;
   first_name: string;
   middle_name?: string;
+  date_of_birth?: string;
   email?: string;
   phone?: string;
   telegram?: string;

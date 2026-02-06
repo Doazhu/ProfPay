@@ -144,6 +144,7 @@ class Payer(Base):
     last_name = Column(String(100), nullable=False, index=True)
     first_name = Column(String(100), nullable=False)
     middle_name = Column(String(100), nullable=True)
+    date_of_birth = Column(Date, nullable=True)
 
     # Contact info
     email = Column(String(100), nullable=True)

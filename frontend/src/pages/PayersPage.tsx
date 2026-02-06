@@ -133,6 +133,11 @@ export default function PayersPage() {
     return group?.name || '—';
   };
 
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return '—';
+    return new Date(dateStr).toLocaleDateString('ru-RU');
+  };
+
   return (
     <div className="animate-fade-in">
       {/* Header */}
@@ -229,6 +234,7 @@ export default function PayersPage() {
                     <th className="text-left py-3 px-4 text-sm font-medium text-accent">Факультет</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-accent">Группа</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-accent">Курс</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-accent">Дата рождения</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-accent">Статус</th>
                     <th className="text-right py-3 px-4 text-sm font-medium text-accent">Оплачено</th>
                     <th className="text-right py-3 px-4 text-sm font-medium text-accent">Действия</th>
@@ -251,6 +257,7 @@ export default function PayersPage() {
                       <td className="py-3 px-4 text-accent">{getFacultyName(payer.faculty_id)}</td>
                       <td className="py-3 px-4 text-accent">{getGroupName(payer.group_id)}</td>
                       <td className="py-3 px-4 text-accent">{payer.course || '—'}</td>
+                      <td className="py-3 px-4 text-accent">{formatDate(payer.date_of_birth)}</td>
                       <td className="py-3 px-4">
                         <StatusBadge status={payer.status} />
                       </td>
@@ -292,6 +299,7 @@ export default function PayersPage() {
                     <span className="text-accent">
                       {getFacultyName(payer.faculty_id)} • {getGroupName(payer.group_id)}
                       {payer.course && ` • ${payer.course} курс`}
+                      {payer.date_of_birth && ` • д.р. ${formatDate(payer.date_of_birth)}`}
                     </span>
                     <span className="font-medium text-dark">{formatMoney(payer.total_paid)}</span>
                   </div>

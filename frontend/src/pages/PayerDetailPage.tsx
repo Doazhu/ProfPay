@@ -34,6 +34,7 @@ export default function PayerDetailPage() {
     last_name: '',
     first_name: '',
     middle_name: '',
+    date_of_birth: '',
     email: '',
     phone: '',
     telegram: '',
@@ -80,6 +81,7 @@ export default function PayerDetailPage() {
         last_name: payerData.last_name,
         first_name: payerData.first_name,
         middle_name: payerData.middle_name || '',
+        date_of_birth: payerData.date_of_birth || '',
         email: payerData.email || '',
         phone: payerData.phone || '',
         telegram: payerData.telegram || '',
@@ -101,6 +103,7 @@ export default function PayerDetailPage() {
     try {
       const updated = await payerApi.update(Number(id), {
         ...editData,
+        date_of_birth: editData.date_of_birth || undefined,
         faculty_id: editData.faculty_id || undefined,
         group_id: editData.group_id || undefined,
         course: editData.course || undefined,
@@ -269,6 +272,15 @@ export default function PayerDetailPage() {
                 />
               </div>
             </div>
+            <div style={{ maxWidth: '220px' }}>
+              <label className="block text-sm text-accent mb-1">Дата рождения</label>
+              <input
+                type="date"
+                value={editData.date_of_birth}
+                onChange={(e) => setEditData({ ...editData, date_of_birth: e.target.value })}
+                className="input"
+              />
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -373,8 +385,12 @@ export default function PayerDetailPage() {
           // Display Info
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <h3 className="text-sm font-medium text-accent mb-3">Контакты</h3>
+              <h3 className="text-sm font-medium text-accent mb-3">Личные данные</h3>
               <div className="space-y-2">
+                <p className="flex items-center gap-2">
+                  <span className="text-accent">Дата рождения:</span>
+                  <span className="text-dark">{payer.date_of_birth ? formatDate(payer.date_of_birth) : '—'}</span>
+                </p>
                 <p className="flex items-center gap-2">
                   <span className="text-accent">Email:</span>
                   <span className="text-dark">{payer.email || '—'}</span>

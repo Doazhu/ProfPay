@@ -304,3 +304,4 @@ output.css
 .kiro
 .vscode
 Deploy.md
+docker-compose.local.yml

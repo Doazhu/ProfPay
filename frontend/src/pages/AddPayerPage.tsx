@@ -16,6 +16,7 @@ export default function AddPayerPage() {
     last_name: '',
     first_name: '',
     middle_name: '',
+    date_of_birth: '',
     email: '',
     phone: '',
     telegram: '',
@@ -83,6 +84,7 @@ export default function AddPayerPage() {
     try {
       const payer = await payerApi.create({
         ...formData,
+        date_of_birth: formData.date_of_birth || undefined,
         faculty_id: formData.faculty_id ? Number(formData.faculty_id) : undefined,
         group_id: formData.group_id ? Number(formData.group_id) : undefined,
         course: formData.course ? Number(formData.course) : undefined,
@@ -154,6 +156,18 @@ export default function AddPayerPage() {
                 className="input"
               />
             </div>
+          </div>
+          <div className="mt-4" style={{ maxWidth: '220px' }}>
+            <label className="block text-sm font-medium text-accent mb-1">
+              Дата рождения
+            </label>
+            <input
+              type="date"
+              name="date_of_birth"
+              value={formData.date_of_birth || ''}
+              onChange={handleChange}
+              className="input"
+            />
           </div>
         </div>
 

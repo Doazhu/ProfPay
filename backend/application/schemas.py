@@ -252,6 +252,7 @@ class PayerCreate(BaseModel):
     last_name: str = Field(..., min_length=1, max_length=100)
     first_name: str = Field(..., min_length=1, max_length=100)
     middle_name: Optional[str] = Field(None, max_length=100)
+    date_of_birth: Optional[date] = None
     email: Optional[EmailStr] = None
     phone: Optional[str] = Field(None, max_length=20)
     telegram: Optional[str] = Field(None, max_length=100)
@@ -280,6 +281,7 @@ class PayerUpdate(BaseModel):
     last_name: Optional[str] = Field(None, min_length=1, max_length=100)
     first_name: Optional[str] = Field(None, min_length=1, max_length=100)
     middle_name: Optional[str] = Field(None, max_length=100)
+    date_of_birth: Optional[date] = None
     email: Optional[EmailStr] = None
     phone: Optional[str] = Field(None, max_length=20)
     telegram: Optional[str] = Field(None, max_length=100)
@@ -310,6 +312,7 @@ class PayerResponse(BaseModel):
     last_name: str
     first_name: str
     middle_name: Optional[str]
+    date_of_birth: Optional[date]
     full_name: str
     email: Optional[str]
     phone: Optional[str]
