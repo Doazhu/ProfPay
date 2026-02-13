@@ -23,6 +23,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response: Response = await call_next(request)
 
+        # Skip CSP for Swagger/ReDoc docs (they load from CDN)
+        if request.url.path in ("/api/docs", "/api/redoc", "/openapi.json"):
+            return response
+
         # Content Security Policy
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
