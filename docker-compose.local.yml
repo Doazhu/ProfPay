@@ -1,6 +1,113 @@
-# Override for local development (no SSL)
+# =============================================================================
+# Docker Compose for LOCAL development (Windows / macOS / Linux)
+# Usage: docker-compose -f docker-compose.local.yml up --build
+# =============================================================================
+
 services:
+  # =============================================================================
+  # PostgreSQL Database
+  # =============================================================================
+  db:
+    image: postgres:15-alpine
+    container_name: profpay-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-profpay_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-profpay_password}
+      POSTGRES_DB: ${POSTGRES_DB:-profpay_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-profpay_user} -d ${POSTGRES_DB:-profpay_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - profpay-network
+
+  # =============================================================================
+  # Backend API (FastAPI)
+  # =============================================================================
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: profpay-backend
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-profpay_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-profpay_password}
+      POSTGRES_DB: ${POSTGRES_DB:-profpay_db}
+      SECRET_KEY: ${SECRET_KEY:-local-dev-secret-key}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      CORS_ORIGINS: '["http://localhost","http://localhost:80","http://localhost:3000","http://localhost:5173"]'
+      DEBUG: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - profpay-network
+
+  # =============================================================================
+  # Frontend (React + Nginx)
+  # =============================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: profpay-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - profpay-network
+
+  # =============================================================================
+  # Nginx Reverse Proxy (HTTP only, no SSL for local)
+  # =============================================================================
   nginx:
+    image: nginx:1.25-alpine
+    container_name: profpay-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
     volumes:
       - ./nginx/nginx.local.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - backend
     command: nginx -g "daemon off;"
+    networks:
+      - profpay-network
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  profpay-network:
+    driver: bridge
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local

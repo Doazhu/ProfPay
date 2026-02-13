@@ -10,19 +10,68 @@ from backend.core.database import get_db
 from backend.core.config import settings
 from backend.core.security import (
     verify_password, get_password_hash,
-    create_access_token, create_refresh_token, decode_token
+    create_access_token, create_refresh_token, decode_token,
+    encrypt_session_key, decrypt_session_key,
+)
+from backend.core.encryption import (
+    generate_master_key, generate_salt, derive_user_key,
+    wrap_master_key, unwrap_master_key,
+    encrypt_field, decrypt_field, encrypt_decimal, encrypt_date,
 )
 from backend.application.schemas import (
     LoginRequest, TokenResponse, UserCreate, UserResponse, UserUpdate
 )
-from backend.domain.models import SystemUser, UserRole
+from backend.domain.models import SystemUser, UserRole, Payer, Payment, AuditLog
 from backend.infrastructure.repositories import UserRepository
 from backend.presentation.dependencies import (
-    get_current_user, require_admin
+    get_current_user, require_admin, get_encryption_key
 )
 
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+def _migrate_encrypt_existing_data(db: Session, master_key: bytes) -> None:
+    """One-time migration: encrypt all existing plaintext data in the DB."""
+    # Encrypt payer fields
+    payers = db.query(Payer).all()
+    for payer in payers:
+        # Skip if already encrypted (Fernet tokens start with 'gAAAAA')
+        if payer.last_name and not payer.last_name.startswith("gAAAAA"):
+            payer.last_name = encrypt_field(payer.last_name, master_key)
+            payer.first_name = encrypt_field(payer.first_name, master_key)
+            payer.middle_name = encrypt_field(payer.middle_name, master_key)
+            payer.date_of_birth = encrypt_date(
+                payer.date_of_birth, master_key
+            ) if payer.date_of_birth and not isinstance(payer.date_of_birth, str) else encrypt_field(
+                str(payer.date_of_birth) if payer.date_of_birth else None, master_key
+            )
+            payer.email = encrypt_field(payer.email, master_key)
+            payer.phone = encrypt_field(payer.phone, master_key)
+            payer.telegram = encrypt_field(payer.telegram, master_key)
+            payer.vk = encrypt_field(payer.vk, master_key)
+            payer.stipend_amount = encrypt_decimal(payer.stipend_amount, master_key) if payer.stipend_amount else None
+            payer.budget_percent = encrypt_decimal(payer.budget_percent, master_key) if payer.budget_percent else None
+            payer.notes = encrypt_field(payer.notes, master_key)
+
+    # Encrypt payment fields
+    payments = db.query(Payment).all()
+    for payment in payments:
+        if payment.amount and not str(payment.amount).startswith("gAAAAA"):
+            payment.amount = encrypt_decimal(payment.amount, master_key) if payment.amount else None
+            payment.receipt_number = encrypt_field(payment.receipt_number, master_key)
+            payment.notes = encrypt_field(payment.notes, master_key)
+
+    # Encrypt audit log sensitive fields
+    audit_logs = db.query(AuditLog).all()
+    for log in audit_logs:
+        if log.old_values and not log.old_values.startswith("gAAAAA"):
+            log.old_values = encrypt_field(log.old_values, master_key)
+        if log.new_values and not log.new_values.startswith("gAAAAA"):
+            log.new_values = encrypt_field(log.new_values, master_key)
+
+    db.commit()
+    print("Encryption migration completed for existing data")
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -34,6 +83,7 @@ async def login(
     """
     Authenticate user and return JWT tokens.
     Sets HttpOnly cookies for security.
+    On first login after encryption update, migrates existing data.
     """
     user_repo = UserRepository(db)
     user = user_repo.get_by_username(login_data.username)
@@ -50,6 +100,35 @@ async def login(
             detail="User account is deactivated",
         )
 
+    # --- Encryption key management ---
+    if user.encrypted_master_key is None:
+        # First login after encryption update: generate master key & migrate data
+        master_key = generate_master_key()
+        salt = generate_salt()
+        user_key = derive_user_key(login_data.password, salt)
+        user.encrypted_master_key = wrap_master_key(master_key, user_key)
+        user.key_salt = salt
+
+        # Wrap master key for all other users (they'll need to re-login)
+        other_users = db.query(SystemUser).filter(SystemUser.id != user.id).all()
+        for other_user in other_users:
+            # Other users don't have their key yet — set a flag
+            # They'll get it when admin creates/updates them or resets password
+            pass
+
+        # Migrate existing plaintext data
+        _migrate_encrypt_existing_data(db, master_key)
+    else:
+        # Normal login: unwrap master key
+        salt = user.key_salt
+        user_key = derive_user_key(login_data.password, salt)
+        master_key = unwrap_master_key(user.encrypted_master_key, user_key)
+        if master_key is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Failed to decrypt encryption key",
+            )
+
     # Update last login
     user.last_login = datetime.utcnow()
     user_repo.update(user)
@@ -57,6 +136,9 @@ async def login(
     # Create tokens
     access_token = create_access_token(str(user.id), user.role.value)
     refresh_token = create_refresh_token(str(user.id), user.role.value)
+
+    # Encrypt master key for session cookie
+    enc_key_cookie = encrypt_session_key(master_key)
 
     # Set HttpOnly cookies
     response.set_cookie(
@@ -70,6 +152,14 @@ async def login(
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
+        httponly=settings.COOKIE_HTTPONLY,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+    )
+    response.set_cookie(
+        key="encryption_key",
+        value=enc_key_cookie,
         httponly=settings.COOKIE_HTTPONLY,
         secure=settings.COOKIE_SECURE,
         samesite=settings.COOKIE_SAMESITE,
@@ -135,6 +225,18 @@ async def refresh_token(
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
     )
 
+    # Preserve encryption_key cookie
+    enc_key = request.cookies.get("encryption_key")
+    if enc_key:
+        response.set_cookie(
+            key="encryption_key",
+            value=enc_key,
+            httponly=settings.COOKIE_HTTPONLY,
+            secure=settings.COOKIE_SECURE,
+            samesite=settings.COOKIE_SAMESITE,
+            max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+        )
+
     return TokenResponse(
         access_token=new_access_token,
         refresh_token=new_refresh_token
@@ -146,6 +248,7 @@ async def logout(response: Response):
     """Logout user by clearing cookies."""
     response.delete_cookie("access_token")
     response.delete_cookie("refresh_token")
+    response.delete_cookie("encryption_key")
     return {"message": "Successfully logged out"}
 
 
@@ -160,10 +263,12 @@ async def get_current_user_info(
 @router.post("/users", response_model=UserResponse)
 async def create_user(
     user_data: UserCreate,
+    request: Request,
     db: Session = Depends(get_db),
-    current_user: SystemUser = Depends(require_admin)
+    current_user: SystemUser = Depends(require_admin),
+    master_key: bytes = Depends(get_encryption_key),
 ):
-    """Create a new user (admin only)."""
+    """Create a new user (admin only). Wraps master encryption key for the new user."""
     user_repo = UserRepository(db)
 
     # Check if username exists
@@ -180,12 +285,19 @@ async def create_user(
             detail="Email already registered",
         )
 
+    # Wrap master key for the new user
+    salt = generate_salt()
+    user_key = derive_user_key(user_data.password, salt)
+    wrapped_key = wrap_master_key(master_key, user_key)
+
     new_user = SystemUser(
         username=user_data.username,
         email=user_data.email,
         hashed_password=get_password_hash(user_data.password),
         full_name=user_data.full_name,
-        role=user_data.role
+        role=user_data.role,
+        encrypted_master_key=wrapped_key,
+        key_salt=salt,
     )
 
     return user_repo.create(new_user)

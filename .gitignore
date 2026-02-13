@@ -1,4 +1,4 @@
-# Byte-compiled / optimized / DLL files
+# Byte-compiled / optimized / DLL files2
 __pycache__/
 *.py[codz]
 *$py.class
@@ -305,3 +305,4 @@ output.css
 .vscode
 Deploy.md
 docker-compose.local.yml
+.claude

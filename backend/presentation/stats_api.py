@@ -12,7 +12,7 @@ from backend.application.schemas import (
 )
 from backend.domain.models import SystemUser
 from backend.infrastructure.repositories import StatsRepository
-from backend.presentation.dependencies import require_any_role
+from backend.presentation.dependencies import require_any_role, get_encryption_key
 
 
 router = APIRouter(prefix="/stats", tags=["Statistics"])
@@ -21,20 +21,22 @@ router = APIRouter(prefix="/stats", tags=["Statistics"])
 @router.get("/dashboard", response_model=DashboardStats)
 async def get_dashboard_stats(
     db: Session = Depends(get_db),
-    current_user: SystemUser = Depends(require_any_role)
+    current_user: SystemUser = Depends(require_any_role),
+    encryption_key: bytes = Depends(get_encryption_key),
 ):
     """Get overall dashboard statistics."""
-    stats_repo = StatsRepository(db)
+    stats_repo = StatsRepository(db, encryption_key)
     return stats_repo.get_dashboard_stats()
 
 
 @router.get("/by-faculty", response_model=list[FacultyStats])
 async def get_faculty_stats(
     db: Session = Depends(get_db),
-    current_user: SystemUser = Depends(require_any_role)
+    current_user: SystemUser = Depends(require_any_role),
+    encryption_key: bytes = Depends(get_encryption_key),
 ):
     """Get statistics grouped by faculty."""
-    stats_repo = StatsRepository(db)
+    stats_repo = StatsRepository(db, encryption_key)
     return stats_repo.get_faculty_stats()
 
 
@@ -42,8 +44,9 @@ async def get_faculty_stats(
 async def get_monthly_stats(
     year: int = Query(default_factory=lambda: datetime.now().year),
     db: Session = Depends(get_db),
-    current_user: SystemUser = Depends(require_any_role)
+    current_user: SystemUser = Depends(require_any_role),
+    encryption_key: bytes = Depends(get_encryption_key),
 ):
     """Get monthly payment statistics for a year."""
-    stats_repo = StatsRepository(db)
+    stats_repo = StatsRepository(db, encryption_key)
     return stats_repo.get_monthly_stats(year)

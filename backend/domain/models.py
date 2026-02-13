@@ -8,7 +8,7 @@ from typing import List, Optional
 
 from sqlalchemy import (
     Column, Integer, String, Boolean, DateTime, Date,
-    ForeignKey, Numeric, Enum, Text, Index
+    ForeignKey, Numeric, Enum, Text, Index, LargeBinary
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -51,6 +51,10 @@ class SystemUser(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     last_login = Column(DateTime, nullable=True)
+
+    # Encryption: wrapped master key and PBKDF2 salt per user
+    encrypted_master_key = Column(LargeBinary, nullable=True)
+    key_salt = Column(LargeBinary, nullable=True)
 
     def __repr__(self):
         return f"<SystemUser {self.username} ({self.role})>"
@@ -140,22 +144,22 @@ class Payer(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    # Personal info
-    last_name = Column(String(100), nullable=False, index=True)
-    first_name = Column(String(100), nullable=False)
-    middle_name = Column(String(100), nullable=True)
-    date_of_birth = Column(Date, nullable=True)
+    # Personal info (encrypted in DB)
+    last_name = Column(Text, nullable=False)
+    first_name = Column(Text, nullable=False)
+    middle_name = Column(Text, nullable=True)
+    date_of_birth = Column(Text, nullable=True)  # encrypted ISO date string
 
-    # Contact info
-    email = Column(String(100), nullable=True)
-    phone = Column(String(20), nullable=True)
-    telegram = Column(String(100), nullable=True)  # Telegram username
-    vk = Column(String(100), nullable=True)  # VK link
+    # Contact info (encrypted in DB)
+    email = Column(Text, nullable=True)
+    phone = Column(Text, nullable=True)
+    telegram = Column(Text, nullable=True)  # Telegram username
+    vk = Column(Text, nullable=True)  # VK link
 
-    # Budget student info
+    # Budget student info (amounts encrypted in DB)
     is_budget = Column(Boolean, default=False)
-    stipend_amount = Column(Numeric(10, 2), nullable=True)
-    budget_percent = Column(Numeric(5, 2), nullable=True)
+    stipend_amount = Column(Text, nullable=True)  # encrypted Decimal
+    budget_percent = Column(Text, nullable=True)  # encrypted Decimal
 
     # University info - all optional now
     faculty_id = Column(Integer, ForeignKey("faculties.id"), nullable=True)  # Optional
@@ -183,9 +187,8 @@ class Payer(Base):
     group = relationship("StudentGroup", back_populates="payers")
     payments = relationship("Payment", back_populates="payer", cascade="all, delete-orphan")
 
-    # Indexes for search
+    # Indexes for search (name indexes removed — encrypted data can't be searched in SQL)
     __table_args__ = (
-        Index("ix_payers_full_name", "last_name", "first_name"),
         Index("ix_payers_faculty_status", "faculty_id", "status"),
     )
 
@@ -213,8 +216,8 @@ class Payment(Base):
     id = Column(Integer, primary_key=True, index=True)
     payer_id = Column(Integer, ForeignKey("payers.id"), nullable=False)
 
-    # Payment details
-    amount = Column(Numeric(10, 2), nullable=False)
+    # Payment details (amount encrypted in DB)
+    amount = Column(Text, nullable=False)  # encrypted Decimal
     payment_date = Column(Date, nullable=False, index=True)
 
     # Semester info
@@ -225,8 +228,8 @@ class Payment(Base):
     period_start = Column(Date, nullable=True)
     period_end = Column(Date, nullable=True)
 
-    # Optional info
-    receipt_number = Column(String(50), nullable=True)
+    # Optional info (encrypted in DB)
+    receipt_number = Column(Text, nullable=True)
     payment_method = Column(String(50), nullable=True)  # cash, card, transfer
     notes = Column(Text, nullable=True)
 

@@ -24,7 +24,7 @@ from backend.infrastructure.repositories import (
     PaymentSettingsRepository, AppSettingsRepository
 )
 from backend.presentation.dependencies import (
-    get_current_user, require_operator, require_any_role
+    get_current_user, require_operator, require_any_role, get_encryption_key
 )
 
 
@@ -373,10 +373,11 @@ async def list_payers(
     status: Optional[PaymentStatus] = None,
     search: Optional[str] = Query(None, max_length=100),
     db: Session = Depends(get_db),
-    current_user: SystemUser = Depends(require_any_role)
+    current_user: SystemUser = Depends(require_any_role),
+    encryption_key: bytes = Depends(get_encryption_key),
 ):
     """Get paginated list of payers with filters."""
-    payer_repo = PayerRepository(db)
+    payer_repo = PayerRepository(db, encryption_key)
     skip = (page - 1) * per_page
 
     payers, total = payer_repo.get_all(
@@ -433,10 +434,11 @@ async def list_payers(
 async def get_payer(
     payer_id: int,
     db: Session = Depends(get_db),
-    current_user: SystemUser = Depends(require_any_role)
+    current_user: SystemUser = Depends(require_any_role),
+    encryption_key: bytes = Depends(get_encryption_key),
 ):
     """Get payer details with faculty, group, and payments."""
-    payer_repo = PayerRepository(db)
+    payer_repo = PayerRepository(db, encryption_key)
     payer = payer_repo.get_by_id(payer_id)
 
     if not payer:
@@ -452,10 +454,11 @@ async def get_payer(
 async def create_payer(
     payer_data: PayerCreate,
     db: Session = Depends(get_db),
-    current_user: SystemUser = Depends(require_operator)
+    current_user: SystemUser = Depends(require_operator),
+    encryption_key: bytes = Depends(get_encryption_key),
 ):
     """Create a new payer."""
-    payer_repo = PayerRepository(db)
+    payer_repo = PayerRepository(db, encryption_key)
     faculty_repo = FacultyRepository(db)
     group_repo = GroupRepository(db)
 
@@ -510,10 +513,11 @@ async def update_payer(
     payer_id: int,
     payer_data: PayerUpdate,
     db: Session = Depends(get_db),
-    current_user: SystemUser = Depends(require_operator)
+    current_user: SystemUser = Depends(require_operator),
+    encryption_key: bytes = Depends(get_encryption_key),
 ):
     """Update a payer."""
-    payer_repo = PayerRepository(db)
+    payer_repo = PayerRepository(db, encryption_key)
     payer = payer_repo.get_by_id(payer_id)
 
     if not payer:
@@ -540,10 +544,11 @@ async def update_payer(
 async def delete_payer(
     payer_id: int,
     db: Session = Depends(get_db),
-    current_user: SystemUser = Depends(require_operator)
+    current_user: SystemUser = Depends(require_operator),
+    encryption_key: bytes = Depends(get_encryption_key),
 ):
     """Soft delete a payer."""
-    payer_repo = PayerRepository(db)
+    payer_repo = PayerRepository(db, encryption_key)
 
     if not payer_repo.delete(payer_id):
         raise HTTPException(
@@ -562,10 +567,11 @@ async def list_debtors(
     per_page: int = Query(20, ge=1, le=100),
     faculty_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: SystemUser = Depends(require_any_role)
+    current_user: SystemUser = Depends(require_any_role),
+    encryption_key: bytes = Depends(get_encryption_key),
 ):
     """Get paginated list of debtors (unpaid and partial status)."""
-    payer_repo = PayerRepository(db)
+    payer_repo = PayerRepository(db, encryption_key)
     skip = (page - 1) * per_page
 
     debtors, total = payer_repo.get_debtors(
@@ -620,11 +626,12 @@ async def list_debtors(
 async def list_payer_payments(
     payer_id: int,
     db: Session = Depends(get_db),
-    current_user: SystemUser = Depends(require_any_role)
+    current_user: SystemUser = Depends(require_any_role),
+    encryption_key: bytes = Depends(get_encryption_key),
 ):
     """Get all payments for a payer."""
-    payer_repo = PayerRepository(db)
-    payment_repo = PaymentRepository(db)
+    payer_repo = PayerRepository(db, encryption_key)
+    payment_repo = PaymentRepository(db, encryption_key)
 
     if not payer_repo.get_by_id(payer_id):
         raise HTTPException(
@@ -639,11 +646,12 @@ async def list_payer_payments(
 async def create_payment(
     payment_data: PaymentCreate,
     db: Session = Depends(get_db),
-    current_user: SystemUser = Depends(require_operator)
+    current_user: SystemUser = Depends(require_operator),
+    encryption_key: bytes = Depends(get_encryption_key),
 ):
     """Create a new payment."""
-    payer_repo = PayerRepository(db)
-    payment_repo = PaymentRepository(db)
+    payer_repo = PayerRepository(db, encryption_key)
+    payment_repo = PaymentRepository(db, encryption_key)
 
     payer = payer_repo.get_by_id(payment_data.payer_id)
     if not payer:
@@ -682,10 +690,11 @@ async def update_payment(
     payment_id: int,
     payment_data: PaymentUpdate,
     db: Session = Depends(get_db),
-    current_user: SystemUser = Depends(require_operator)
+    current_user: SystemUser = Depends(require_operator),
+    encryption_key: bytes = Depends(get_encryption_key),
 ):
     """Update a payment."""
-    payment_repo = PaymentRepository(db)
+    payment_repo = PaymentRepository(db, encryption_key)
     payment = payment_repo.get_by_id(payment_id)
 
     if not payment:
@@ -705,10 +714,11 @@ async def update_payment(
 async def delete_payment(
     payment_id: int,
     db: Session = Depends(get_db),
-    current_user: SystemUser = Depends(require_operator)
+    current_user: SystemUser = Depends(require_operator),
+    encryption_key: bytes = Depends(get_encryption_key),
 ):
     """Delete a payment."""
-    payment_repo = PaymentRepository(db)
+    payment_repo = PaymentRepository(db, encryption_key)
 
     if not payment_repo.delete(payment_id):
         raise HTTPException(

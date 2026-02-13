@@ -62,7 +62,6 @@ services:
   # Frontend (React + Nginx)
   # =============================================================================
   frontend:
-    platform: linux/amd64
     build:
       context: ./frontend
       dockerfile: Dockerfile

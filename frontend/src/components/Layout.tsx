@@ -16,7 +16,7 @@ export default function Layout() {
   const closeSidebar = () => setIsSidebarOpen(false);
 
   return (
-    <div className="flex min-h-screen bg-light">
+    <div className="flex min-h-screen" style={{ background: 'linear-gradient(135deg, #F0F2F5 0%, #E8EDF4 50%, #F0F2F5 100%)' }}>
       {/* Desktop sidebar - always visible on md+ */}
       <div className="hidden md:block">
         <Sidebar />
@@ -29,11 +29,13 @@ export default function Layout() {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Mobile header with burger menu */}
-        <header className="md:hidden sticky top-0 z-30 bg-white border-b border-light-dark px-4 py-3 flex items-center gap-3">
+        {/* Mobile header with glassmorphism */}
+        <header className="md:hidden sticky top-0 z-30 px-4 py-3 flex items-center gap-3 border-b border-white/60"
+          style={{ background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}
+        >
           <button
             onClick={openSidebar}
-            className="p-2 -ml-2 rounded-lg text-accent hover:bg-light-dark active:bg-light-darker touch-target"
+            className="p-2 -ml-2 rounded-xl text-accent hover:bg-light-dark/50 active:bg-light-darker touch-target"
             aria-label="Открыть меню"
           >
             <MenuIcon />
@@ -43,7 +45,7 @@ export default function Layout() {
 
         {/* Page content */}
         <main className="flex-1 overflow-auto">
-          <div className="p-4 md:p-6 lg:p-8">
+          <div className="p-4 md:p-6 lg:p-8 max-w-[1400px]">
             <Outlet />
           </div>
         </main>

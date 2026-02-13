@@ -229,20 +229,20 @@ export default function PayersPage() {
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="bg-light-dark/50">
-                    <th className="text-left py-3 px-4 text-sm font-medium text-accent">ФИО</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-accent">Факультет</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-accent">Группа</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-accent">Курс</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-accent">Дата рождения</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-accent">Статус</th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-accent">Оплачено</th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-accent">Действия</th>
+                  <tr className="border-b border-light-dark">
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider">ФИО</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider">Факультет</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider">Группа</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider">Курс</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider">Д. рождения</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider">Статус</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider">Оплачено</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {payers.map((payer) => (
-                    <tr key={payer.id} className="border-b border-light-dark last:border-0 table-row-interactive">
+                    <tr key={payer.id} className="border-b border-light-dark/50 last:border-0 table-row-interactive">
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
                           <Link
@@ -289,7 +289,7 @@ export default function PayersPage() {
                 <Link
                   key={payer.id}
                   to={`/payers/${payer.id}`}
-                  className="block p-4 bg-light-dark/30 rounded-lg active:bg-light-dark/50 transition-colors"
+                  className="block p-4 bg-light/60 rounded-xl active:bg-light-dark/40 transition-all duration-150 hover:shadow-soft"
                 >
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="min-w-0 flex-1">
@@ -321,7 +321,7 @@ export default function PayersPage() {
 
         {/* Pagination */}
         {pages > 1 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-light-dark">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-light-dark/50">
             <p className="text-sm text-accent order-2 sm:order-1">
               Страница {page} из {pages}
             </p>

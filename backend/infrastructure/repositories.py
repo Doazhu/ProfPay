@@ -1,17 +1,79 @@
 """
 Repository implementations for database operations.
 Uses parameterized queries to prevent SQL injection.
+Sensitive fields are encrypted/decrypted transparently via the encryption module.
 """
+from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 from typing import List, Optional, Tuple
-from sqlalchemy import func, and_, or_, Integer, cast
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func, and_, or_, Integer, cast, extract
+from sqlalchemy.orm import Session, joinedload, object_session
 
+from backend.core.encryption import (
+    encrypt_field, decrypt_field,
+    encrypt_decimal, decrypt_decimal,
+    encrypt_date, decrypt_date,
+)
 from backend.domain.models import (
     SystemUser, Faculty, StudentGroup, Payer, Payment, AuditLog,
     PaymentStatus, PaymentSettings, AppSettings
 )
+
+
+# ---------------------------------------------------------------------------
+# Helpers: encrypt / decrypt Payer & Payment objects in-place
+# ---------------------------------------------------------------------------
+
+def _safe_expunge(db: Session, obj) -> None:
+    """Detach object from session if attached (prevents dirty flush)."""
+    if object_session(obj) is not None:
+        db.expunge(obj)
+
+
+def _encrypt_payer(payer: Payer, key: bytes) -> None:
+    """Encrypt sensitive payer fields before DB write."""
+    payer.last_name = encrypt_field(payer.last_name, key)
+    payer.first_name = encrypt_field(payer.first_name, key)
+    payer.middle_name = encrypt_field(payer.middle_name, key)
+    payer.date_of_birth = encrypt_date(payer.date_of_birth, key) if not isinstance(payer.date_of_birth, str) else encrypt_field(payer.date_of_birth, key)
+    payer.email = encrypt_field(payer.email, key)
+    payer.phone = encrypt_field(payer.phone, key)
+    payer.telegram = encrypt_field(payer.telegram, key)
+    payer.vk = encrypt_field(payer.vk, key)
+    payer.stipend_amount = encrypt_decimal(payer.stipend_amount, key) if payer.stipend_amount is not None else None
+    payer.budget_percent = encrypt_decimal(payer.budget_percent, key) if payer.budget_percent is not None else None
+    payer.notes = encrypt_field(payer.notes, key)
+
+
+def _decrypt_payer(payer: Payer, key: bytes) -> None:
+    """Decrypt sensitive payer fields after DB read."""
+    payer.last_name = decrypt_field(payer.last_name, key) or payer.last_name
+    payer.first_name = decrypt_field(payer.first_name, key) or payer.first_name
+    payer.middle_name = decrypt_field(payer.middle_name, key)
+    payer.date_of_birth = decrypt_date(payer.date_of_birth, key)
+    payer.email = decrypt_field(payer.email, key)
+    payer.phone = decrypt_field(payer.phone, key)
+    payer.telegram = decrypt_field(payer.telegram, key)
+    payer.vk = decrypt_field(payer.vk, key)
+    payer.stipend_amount = decrypt_decimal(payer.stipend_amount, key)
+    payer.budget_percent = decrypt_decimal(payer.budget_percent, key)
+    payer.notes = decrypt_field(payer.notes, key)
+
+
+def _encrypt_payment(payment: Payment, key: bytes) -> None:
+    """Encrypt sensitive payment fields before DB write."""
+    if payment.amount is not None:
+        payment.amount = encrypt_decimal(payment.amount, key)
+    payment.receipt_number = encrypt_field(payment.receipt_number, key)
+    payment.notes = encrypt_field(payment.notes, key)
+
+
+def _decrypt_payment(payment: Payment, key: bytes) -> None:
+    """Decrypt sensitive payment fields after DB read."""
+    payment.amount = decrypt_decimal(payment.amount, key)
+    payment.receipt_number = decrypt_field(payment.receipt_number, key)
+    payment.notes = decrypt_field(payment.notes, key)
 
 
 class UserRepository:
@@ -129,17 +191,27 @@ class GroupRepository:
 
 
 class PayerRepository:
-    """Repository for Payer operations."""
+    """Repository for Payer operations with field-level encryption."""
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, encryption_key: bytes):
         self.db = db
+        self.key = encryption_key
 
     def get_by_id(self, payer_id: int) -> Optional[Payer]:
-        return self.db.query(Payer).options(
+        payer = self.db.query(Payer).options(
             joinedload(Payer.faculty),
             joinedload(Payer.group),
             joinedload(Payer.payments)
         ).filter(Payer.id == payer_id).first()
+        if payer:
+            payments = list(payer.payments)
+            for p in payments:
+                _safe_expunge(self.db, p)
+            _safe_expunge(self.db, payer)
+            _decrypt_payer(payer, self.key)
+            for p in payments:
+                _decrypt_payment(p, self.key)
+        return payer
 
     def get_all(
         self,
@@ -151,36 +223,49 @@ class PayerRepository:
         search: Optional[str] = None,
         active_only: bool = True
     ) -> Tuple[List[Payer], int]:
-        """Get payers with filters and pagination. Returns (payers, total_count)."""
+        """Get payers with filters and pagination. Returns (payers, total_count).
+
+        SQL-level filters: faculty_id, group_id, status, is_active
+        Python-level: search (on decrypted names/contacts), sort by decrypted name
+        """
         query = self.db.query(Payer)
 
         if active_only:
             query = query.filter(Payer.is_active == True)
-
         if faculty_id:
             query = query.filter(Payer.faculty_id == faculty_id)
-
         if group_id:
             query = query.filter(Payer.group_id == group_id)
-
         if status:
             query = query.filter(Payer.status == status)
 
-        if search:
-            # Safe search with parameterized query
-            search_term = f"%{search}%"
-            query = query.filter(
-                or_(
-                    Payer.last_name.ilike(search_term),
-                    Payer.first_name.ilike(search_term),
-                    Payer.middle_name.ilike(search_term),
-                    Payer.email.ilike(search_term),
-                    Payer.phone.ilike(search_term)
-                )
-            )
+        # Load all matching payers with payments (needed for total_paid computation)
+        all_payers = query.options(joinedload(Payer.payments)).all()
+        # Expunge all before decrypting to prevent dirty flush on later commits
+        for payer in all_payers:
+            for p in payer.payments:
+                _safe_expunge(self.db, p)
+            _safe_expunge(self.db, payer)
+        for payer in all_payers:
+            _decrypt_payer(payer, self.key)
+            for p in payer.payments:
+                _decrypt_payment(p, self.key)
 
-        total = query.count()
-        payers = query.order_by(Payer.last_name, Payer.first_name).offset(skip).limit(limit).all()
+        if search:
+            search_lower = search.lower()
+            all_payers = [
+                p for p in all_payers
+                if search_lower in (p.last_name or "").lower()
+                or search_lower in (p.first_name or "").lower()
+                or search_lower in (p.middle_name or "").lower()
+                or search_lower in (p.email or "").lower()
+                or search_lower in (p.phone or "").lower()
+            ]
+
+        # Sort by decrypted name
+        all_payers.sort(key=lambda p: (p.last_name or "", p.first_name or ""))
+        total = len(all_payers)
+        payers = all_payers[skip:skip + limit]
 
         return payers, total
 
@@ -199,20 +284,40 @@ class PayerRepository:
         if faculty_id:
             query = query.filter(Payer.faculty_id == faculty_id)
 
-        total = query.count()
-        payers = query.order_by(Payer.last_name, Payer.first_name).offset(skip).limit(limit).all()
+        all_payers = query.options(joinedload(Payer.payments)).all()
+        for payer in all_payers:
+            for p in payer.payments:
+                _safe_expunge(self.db, p)
+            _safe_expunge(self.db, payer)
+        for payer in all_payers:
+            _decrypt_payer(payer, self.key)
+            for p in payer.payments:
+                _decrypt_payment(p, self.key)
+
+        all_payers.sort(key=lambda p: (p.last_name or "", p.first_name or ""))
+        total = len(all_payers)
+        payers = all_payers[skip:skip + limit]
 
         return payers, total
 
     def create(self, payer: Payer) -> Payer:
+        _encrypt_payer(payer, self.key)
         self.db.add(payer)
         self.db.commit()
         self.db.refresh(payer)
+        _safe_expunge(self.db, payer)
+        _decrypt_payer(payer, self.key)
         return payer
 
     def update(self, payer: Payer) -> Payer:
+        # Re-attach detached object if needed
+        if object_session(payer) is None:
+            payer = self.db.merge(payer)
+        _encrypt_payer(payer, self.key)
         self.db.commit()
         self.db.refresh(payer)
+        _safe_expunge(self.db, payer)
+        _decrypt_payer(payer, self.key)
         return payer
 
     def delete(self, payer_id: int) -> bool:
@@ -225,18 +330,28 @@ class PayerRepository:
 
 
 class PaymentRepository:
-    """Repository for Payment operations."""
+    """Repository for Payment operations with field-level encryption."""
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, encryption_key: bytes):
         self.db = db
+        self.key = encryption_key
 
     def get_by_id(self, payment_id: int) -> Optional[Payment]:
-        return self.db.query(Payment).filter(Payment.id == payment_id).first()
+        payment = self.db.query(Payment).filter(Payment.id == payment_id).first()
+        if payment:
+            _safe_expunge(self.db, payment)
+            _decrypt_payment(payment, self.key)
+        return payment
 
     def get_by_payer(self, payer_id: int) -> List[Payment]:
-        return self.db.query(Payment).filter(
+        payments = self.db.query(Payment).filter(
             Payment.payer_id == payer_id
         ).order_by(Payment.payment_date.desc()).all()
+        for p in payments:
+            _safe_expunge(self.db, p)
+        for p in payments:
+            _decrypt_payment(p, self.key)
+        return payments
 
     def get_by_period(
         self,
@@ -252,21 +367,34 @@ class PaymentRepository:
         if faculty_id:
             query = query.join(Payer).filter(Payer.faculty_id == faculty_id)
 
-        return query.order_by(Payment.payment_date.desc()).all()
+        payments = query.order_by(Payment.payment_date.desc()).all()
+        for p in payments:
+            _safe_expunge(self.db, p)
+        for p in payments:
+            _decrypt_payment(p, self.key)
+        return payments
 
     def create(self, payment: Payment) -> Payment:
+        _encrypt_payment(payment, self.key)
         self.db.add(payment)
         self.db.commit()
         self.db.refresh(payment)
+        _safe_expunge(self.db, payment)
+        _decrypt_payment(payment, self.key)
         return payment
 
     def update(self, payment: Payment) -> Payment:
+        if object_session(payment) is None:
+            payment = self.db.merge(payment)
+        _encrypt_payment(payment, self.key)
         self.db.commit()
         self.db.refresh(payment)
+        _safe_expunge(self.db, payment)
+        _decrypt_payment(payment, self.key)
         return payment
 
     def delete(self, payment_id: int) -> bool:
-        payment = self.get_by_id(payment_id)
+        payment = self.db.query(Payment).filter(Payment.id == payment_id).first()
         if payment:
             self.db.delete(payment)
             self.db.commit()
@@ -274,10 +402,18 @@ class PaymentRepository:
         return False
 
     def get_total_by_payer(self, payer_id: int) -> Decimal:
-        result = self.db.query(func.sum(Payment.amount)).filter(
+        """Calculate total paid amount — decrypt each amount in Python."""
+        payments = self.db.query(Payment).filter(
             Payment.payer_id == payer_id
-        ).scalar()
-        return result or Decimal("0")
+        ).all()
+        for p in payments:
+            _safe_expunge(self.db, p)
+        total = Decimal("0")
+        for p in payments:
+            _decrypt_payment(p, self.key)
+            if p.amount is not None:
+                total += p.amount
+        return total
 
 
 class PaymentSettingsRepository:
@@ -354,24 +490,33 @@ class AppSettingsRepository:
 
 
 class StatsRepository:
-    """Repository for statistics queries."""
+    """Repository for statistics queries with encrypted field support."""
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, encryption_key: bytes):
         self.db = db
+        self.key = encryption_key
 
     def get_dashboard_stats(self) -> dict:
         """Get overall statistics for dashboard."""
         total_payers = self.db.query(func.count(Payer.id)).filter(Payer.is_active == True).scalar()
-        active_payers = total_payers  # Same as total for active
+        active_payers = total_payers
 
         status_counts = self.db.query(
             Payer.status,
             func.count(Payer.id)
         ).filter(Payer.is_active == True).group_by(Payer.status).all()
 
-        status_dict = {status: count for status, count in status_counts}
+        status_dict = {s: count for s, count in status_counts}
 
-        total_paid = self.db.query(func.sum(Payment.amount)).scalar() or Decimal("0")
+        # Amounts are encrypted — decrypt and sum in Python
+        payments = self.db.query(Payment).all()
+        for p in payments:
+            _safe_expunge(self.db, p)
+        total_paid = Decimal("0")
+        for p in payments:
+            _decrypt_payment(p, self.key)
+            if p.amount is not None:
+                total_paid += p.amount
 
         return {
             "total_payers": total_payers or 0,
@@ -386,6 +531,7 @@ class StatsRepository:
 
     def get_faculty_stats(self) -> List[dict]:
         """Get statistics grouped by faculty."""
+        # Status counts per faculty — these fields are not encrypted
         results = self.db.query(
             Faculty.id,
             Faculty.name,
@@ -397,62 +543,80 @@ class StatsRepository:
             Payer.is_active == True
         )).group_by(Faculty.id, Faculty.name).all()
 
+        # Pre-load all payments with payer faculty info for amount aggregation
+        all_payments = self.db.query(Payment, Payer.faculty_id).join(Payer).all()
+        for payment, _ in all_payments:
+            _safe_expunge(self.db, payment)
+        faculty_totals: dict[int, Decimal] = defaultdict(Decimal)
+        for payment, fac_id in all_payments:
+            _decrypt_payment(payment, self.key)
+            if payment.amount is not None and fac_id is not None:
+                faculty_totals[fac_id] += payment.amount
+
         stats = []
         for row in results:
-            # Get total amount for faculty
-            total_amount = self.db.query(func.sum(Payment.amount)).join(Payer).filter(
-                Payer.faculty_id == row.id
-            ).scalar() or Decimal("0")
-
             stats.append({
                 "faculty_id": row.id,
                 "faculty_name": row.name,
                 "total_payers": row.total or 0,
                 "paid_count": row.paid or 0,
                 "unpaid_count": row.unpaid or 0,
-                "total_amount": total_amount,
+                "total_amount": faculty_totals.get(row.id, Decimal("0")),
             })
 
         return stats
 
     def get_monthly_stats(self, year: int) -> List[dict]:
         """Get monthly payment statistics for a year."""
-        from sqlalchemy import extract
-
-        results = self.db.query(
-            extract('month', Payment.payment_date).label('month'),
-            func.count(Payment.id).label('count'),
-            func.sum(Payment.amount).label('total')
-        ).filter(
+        payments = self.db.query(Payment).filter(
             extract('year', Payment.payment_date) == year
-        ).group_by(
-            extract('month', Payment.payment_date)
-        ).order_by('month').all()
+        ).all()
+        for p in payments:
+            _safe_expunge(self.db, p)
 
-        return [
+        monthly: dict[int, dict] = {}
+        for p in payments:
+            _decrypt_payment(p, self.key)
+            month = p.payment_date.month
+            if month not in monthly:
+                monthly[month] = {"count": 0, "total": Decimal("0")}
+            monthly[month]["count"] += 1
+            if p.amount is not None:
+                monthly[month]["total"] += p.amount
+
+        return sorted([
             {
-                "month": f"{year}-{int(row.month):02d}",
-                "payments_count": row.count,
-                "total_amount": row.total or Decimal("0"),
+                "month": f"{year}-{m:02d}",
+                "payments_count": data["count"],
+                "total_amount": data["total"],
             }
-            for row in results
-        ]
+            for m, data in monthly.items()
+        ], key=lambda x: x["month"])
 
 
 class AuditRepository:
     """Repository for audit log operations."""
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, encryption_key: Optional[bytes] = None):
         self.db = db
+        self.key = encryption_key
 
     def create(self, log: AuditLog) -> AuditLog:
+        if self.key:
+            log.old_values = encrypt_field(log.old_values, self.key)
+            log.new_values = encrypt_field(log.new_values, self.key)
         self.db.add(log)
         self.db.commit()
         self.db.refresh(log)
         return log
 
     def get_by_entity(self, entity_type: str, entity_id: int) -> List[AuditLog]:
-        return self.db.query(AuditLog).filter(
+        logs = self.db.query(AuditLog).filter(
             AuditLog.entity_type == entity_type,
             AuditLog.entity_id == entity_id
         ).order_by(AuditLog.created_at.desc()).all()
+        if self.key:
+            for log in logs:
+                log.old_values = decrypt_field(log.old_values, self.key)
+                log.new_values = decrypt_field(log.new_values, self.key)
+        return logs

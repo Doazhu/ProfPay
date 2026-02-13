@@ -3,7 +3,7 @@
 # =============================================================================
 
 # Stage 1: Dependencies
-FROM --platform=linux/amd64 node:20-slim AS deps
+FROM node:20-slim AS deps
 
 WORKDIR /app
 
@@ -17,7 +17,7 @@ RUN npm ci && npm audit fix || true
 # =============================================================================
 # Stage 2: Builder
 # =============================================================================
-FROM --platform=linux/amd64 node:20-slim AS builder
+FROM node:20-slim AS builder
 
 WORKDIR /app
 

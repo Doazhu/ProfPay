@@ -9,7 +9,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from backend.core.database import get_db
-from backend.core.security import decode_token
+from backend.core.security import decode_token, decrypt_session_key
 from backend.domain.models import SystemUser, UserRole
 from backend.infrastructure.repositories import UserRepository
 
@@ -109,3 +109,27 @@ def require_role(*roles: UserRole):
 require_admin = require_role(UserRole.ADMIN)
 require_operator = require_role(UserRole.ADMIN, UserRole.OPERATOR)
 require_any_role = require_role(UserRole.ADMIN, UserRole.OPERATOR, UserRole.VIEWER)
+
+
+async def get_encryption_key(
+    request: Request,
+    encryption_key: Optional[str] = Cookie(None),
+) -> bytes:
+    """
+    Extract and decrypt the master encryption key from the session cookie.
+    Must be used as a dependency in all endpoints that read/write sensitive data.
+    """
+    if not encryption_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Encryption key not found. Please log in again.",
+        )
+
+    master_key = decrypt_session_key(encryption_key)
+    if master_key is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid encryption key. Please log in again.",
+        )
+
+    return master_key
