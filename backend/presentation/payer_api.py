@@ -1,10 +1,13 @@
 """
 Payer and Payment API endpoints.
 """
+import io
+from datetime import date
 from typing import Optional
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 
 from backend.core.database import get_db
@@ -408,7 +411,9 @@ async def list_payers(
             "budget_percent": payer.budget_percent,
             "faculty_id": payer.faculty_id,
             "group_id": payer.group_id,
+            "group_name": payer.group_name,
             "course": payer.course,
+            "department": payer.department,
             "status": payer.status,
             "membership_start": payer.membership_start,
             "membership_end": payer.membership_end,
@@ -427,6 +432,105 @@ async def list_payers(
         page=page,
         per_page=per_page,
         pages=pages
+    )
+
+
+@router.get("/payers/export")
+async def export_payers_excel(
+    faculty_id: Optional[int] = None,
+    status: Optional[PaymentStatus] = None,
+    search: Optional[str] = Query(None, max_length=100),
+    db: Session = Depends(get_db),
+    current_user: SystemUser = Depends(require_any_role),
+    encryption_key: bytes = Depends(get_encryption_key),
+):
+    """Export payers list to Excel (.xlsx)."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    payer_repo = PayerRepository(db, encryption_key)
+    faculty_repo = FacultyRepository(db)
+
+    # Load all payers (no pagination for export)
+    payers, _ = payer_repo.get_all(
+        skip=0, limit=10000,
+        faculty_id=faculty_id, status=status, search=search
+    )
+
+    faculties = {f.id: (f.short_name or f.name) for f in faculty_repo.get_all(active_only=False)}
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Плательщики"
+
+    # Header style
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="1F9788", end_color="1F9788", fill_type="solid")
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    headers = [
+        "№", "ФИО", "Деректорат", "Группа", "Курс", "Кафедра",
+        "Email", "Телефон", "Telegram",
+        "Бюджетник", "Стипендия", "%",
+        "Статус", "Оплачено (₽)", "Д. рождения", "Примечание"
+    ]
+    col_widths = [5, 35, 20, 12, 7, 15, 28, 18, 15, 12, 12, 6, 14, 15, 14, 30]
+
+    for col_idx, (header, width) in enumerate(zip(headers, col_widths), start=1):
+        cell = ws.cell(row=1, column=col_idx, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center
+        ws.column_dimensions[cell.column_letter].width = width
+
+    ws.row_dimensions[1].height = 30
+
+    status_labels = {"paid": "Оплачено", "unpaid": "Не оплачено", "partial": "Частично", "exempt": "Освобождён"}
+
+    for row_idx, payer in enumerate(payers, start=2):
+        total_paid = float(payer.total_paid) if payer.total_paid else 0.0
+        ws.append([
+            row_idx - 1,
+            payer.full_name or "",
+            faculties.get(payer.faculty_id, ""),
+            payer.group_name or "",
+            payer.course or "",
+            payer.department or "",
+            payer.email or "",
+            payer.phone or "",
+            payer.telegram or "",
+            "Да" if payer.is_budget else "Нет",
+            float(payer.stipend_amount) if payer.stipend_amount else "",
+            float(payer.budget_percent) if payer.budget_percent else "",
+            status_labels.get(payer.status.value if hasattr(payer.status, 'value') else payer.status, payer.status),
+            total_paid,
+            str(payer.date_of_birth) if payer.date_of_birth else "",
+            payer.notes or "",
+        ])
+        # Alternate row color
+        if row_idx % 2 == 0:
+            fill = PatternFill(start_color="F0FAFA", end_color="F0FAFA", fill_type="solid")
+            for col in range(1, len(headers) + 1):
+                ws.cell(row=row_idx, column=col).fill = fill
+
+    # Freeze header row
+    ws.freeze_panes = "A2"
+
+    # Save to buffer
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    today = date.today().strftime("%Y-%m-%d")
+    filename = f"profpay_payers_{today}.xlsx"
+    headers_resp = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Access-Control-Expose-Headers": "Content-Disposition",
+    }
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers_resp,
     )
 
 
@@ -490,7 +594,9 @@ async def create_payer(
         vk=payer_data.vk,
         faculty_id=payer_data.faculty_id,
         group_id=payer_data.group_id,
+        group_name=payer_data.group_name,
         course=payer_data.course,
+        department=payer_data.department,
         status=payer_data.status,
         membership_start=payer_data.membership_start,
         membership_end=payer_data.membership_end,
@@ -598,7 +704,9 @@ async def list_debtors(
             "budget_percent": payer.budget_percent,
             "faculty_id": payer.faculty_id,
             "group_id": payer.group_id,
+            "group_name": payer.group_name,
             "course": payer.course,
+            "department": payer.department,
             "status": payer.status,
             "membership_start": payer.membership_start,
             "membership_end": payer.membership_end,

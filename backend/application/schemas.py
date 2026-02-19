@@ -101,6 +101,12 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 
+class PasswordChange(BaseModel):
+    """Schema for changing user password."""
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
 # ============== Faculty Schemas ==============
 
 class FacultyCreate(BaseModel):
@@ -260,15 +266,17 @@ class PayerCreate(BaseModel):
     phone: Optional[str] = Field(None, max_length=20)
     telegram: Optional[str] = Field(None, max_length=100)
     vk: Optional[str] = Field(None, max_length=100)
-    faculty_id: Optional[int] = None  # Optional now
-    group_id: Optional[int] = None
+    faculty_id: Optional[int] = None  # Optional (деректорат)
+    group_id: Optional[int] = None    # Legacy FK, optional
+    group_name: Optional[str] = Field(None, max_length=50)  # Free-form e.g. "1-мд-35"
     course: Optional[int] = Field(None, ge=1, le=6)
+    department: Optional[str] = Field(None, max_length=100)  # Кафедра e.g. "ЦИАТ", optional
     status: PaymentStatus = PaymentStatus.UNPAID
     membership_start: Optional[date] = None
     membership_end: Optional[date] = None
     notes: Optional[str] = None
 
-    @field_validator('last_name', 'first_name', 'middle_name', 'notes', 'telegram', 'vk')
+    @field_validator('last_name', 'first_name', 'middle_name', 'notes', 'telegram', 'vk', 'group_name', 'department')
     @classmethod
     def sanitize_fields(cls, v):
         return sanitize_string(v) if v else v
@@ -294,14 +302,16 @@ class PayerUpdate(BaseModel):
     vk: Optional[str] = Field(None, max_length=100)
     faculty_id: Optional[int] = None
     group_id: Optional[int] = None
+    group_name: Optional[str] = Field(None, max_length=50)  # Free-form e.g. "1-мд-35"
     course: Optional[int] = Field(None, ge=1, le=6)
+    department: Optional[str] = Field(None, max_length=100)  # Кафедра e.g. "ЦИАТ", optional
     status: Optional[PaymentStatus] = None
     membership_start: Optional[date] = None
     membership_end: Optional[date] = None
     is_active: Optional[bool] = None
     notes: Optional[str] = None
 
-    @field_validator('last_name', 'first_name', 'middle_name', 'notes', 'telegram', 'vk')
+    @field_validator('last_name', 'first_name', 'middle_name', 'notes', 'telegram', 'vk', 'group_name', 'department')
     @classmethod
     def sanitize_fields(cls, v):
         return sanitize_string(v) if v else v
@@ -329,7 +339,9 @@ class PayerResponse(BaseModel):
     vk: Optional[str]
     faculty_id: Optional[int]
     group_id: Optional[int]
+    group_name: Optional[str]
     course: Optional[int]
+    department: Optional[str]
     status: PaymentStatus
     membership_start: Optional[date]
     membership_end: Optional[date]

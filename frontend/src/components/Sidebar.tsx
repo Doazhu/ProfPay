@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 // SVG Icons as components
@@ -36,6 +36,12 @@ const SettingsIcon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+  </svg>
+);
+
+const UserManageIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
   </svg>
 );
 
@@ -80,6 +86,7 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const { user, logout, canEdit, isAdmin } = useAuth();
+  const navigate = useNavigate();
 
   const handleLogout = async () => {
     await logout();
@@ -89,6 +96,11 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     if (onClose) {
       onClose();
     }
+  };
+
+  const handleChangePassword = () => {
+    if (onClose) onClose();
+    navigate('/change-password');
   };
 
   return (
@@ -159,6 +171,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
           {isAdmin && (
             <>
               <p className="text-[10px] font-semibold text-accent/60 uppercase tracking-widest px-4 pt-4 pb-2">Система</p>
+              <NavItem to="/users" icon={<UserManageIcon />} label="Пользователи" onClick={handleNavClick} />
               <NavItem to="/settings" icon={<SettingsIcon />} label="Настройки" onClick={handleNavClick} />
             </>
           )}
@@ -183,6 +196,16 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
                 </p>
               </div>
             </div>
+            <button
+              onClick={handleChangePassword}
+              className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-accent hover:bg-light-dark/50 active:bg-light-dark transition-colors duration-150 mb-1"
+            >
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
+                  d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+              </svg>
+              <span>Сменить пароль</span>
+            </button>
             <button
               onClick={handleLogout}
               className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-red-500 hover:bg-red-50 hover:text-red-600 active:bg-red-100 transition-colors duration-150"

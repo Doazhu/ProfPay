@@ -43,6 +43,10 @@ class Settings(BaseSettings):
             return base.replace("postgresql://", "postgresql+asyncpg://", 1)
         return base
 
+    # Initial admin account (created on first launch if no admin exists)
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD: str = "admin123"  # Override in .env before first launch!
+
     # JWT Authentication
     SECRET_KEY: str = "your-super-secret-key-change-in-production"
     ALGORITHM: str = "HS256"

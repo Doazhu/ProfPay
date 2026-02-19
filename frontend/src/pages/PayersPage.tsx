@@ -1,29 +1,28 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import type { Payer, Faculty, StudentGroup, PaymentStatus } from '../types';
-import { payerApi, facultyApi, groupApi } from '../services/api';
+import type { Payer, Faculty, PaymentStatus } from '../types';
+import { payerApi, facultyApi, exportApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
-// Status Badge Component
+// Status Badge — только 2 рабочих статуса
 function StatusBadge({ status }: { status: PaymentStatus }) {
-  const config = {
-    paid: { label: 'Оплачено', className: 'badge-success' },
-    partial: { label: 'Частично', className: 'badge-warning' },
-    unpaid: { label: 'Не оплачено', className: 'badge-danger' },
-    exempt: { label: 'Освобождён', className: 'badge-info' },
-  };
-
-  const { label, className } = config[status];
-  return <span className={className}>{label}</span>;
+  if (status === 'paid') {
+    return <span className="badge-success">Оплачено</span>;
+  }
+  // partial, unpaid, exempt — всё что не paid считаем "не оплачено" для отображения
+  if (status === 'exempt') {
+    return <span className="badge-info">Освобождён</span>;
+  }
+  return <span className="badge-danger">Не оплачено</span>;
 }
 
 export default function PayersPage() {
   const [payers, setPayers] = useState<Payer[]>([]);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
-  const [groups, setGroups] = useState<StudentGroup[]>([]);
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const { canEdit } = useAuth();
@@ -31,7 +30,6 @@ export default function PayersPage() {
   // Filter state from URL
   const page = parseInt(searchParams.get('page') || '1');
   const facultyId = searchParams.get('faculty') ? parseInt(searchParams.get('faculty')!) : undefined;
-  const groupId = searchParams.get('group') ? parseInt(searchParams.get('group')!) : undefined;
   const status = searchParams.get('status') as PaymentStatus | undefined;
   const search = searchParams.get('search') || '';
 
@@ -41,15 +39,7 @@ export default function PayersPage() {
 
   useEffect(() => {
     loadPayers();
-  }, [page, facultyId, groupId, status, search]);
-
-  useEffect(() => {
-    if (facultyId) {
-      loadGroups(facultyId);
-    } else {
-      loadAllGroups();
-    }
-  }, [facultyId]);
+  }, [page, facultyId, status, search]);
 
   const loadFilters = async () => {
     try {
@@ -60,24 +50,6 @@ export default function PayersPage() {
     }
   };
 
-  const loadAllGroups = async () => {
-    try {
-      const groupData = await groupApi.getAll();
-      setGroups(groupData);
-    } catch (error) {
-      console.error('Failed to load groups:', error);
-    }
-  };
-
-  const loadGroups = async (facultyId: number) => {
-    try {
-      const groupData = await groupApi.getAll(facultyId);
-      setGroups(groupData);
-    } catch (error) {
-      console.error('Failed to load groups:', error);
-    }
-  };
-
   const loadPayers = async () => {
     setIsLoading(true);
     try {
@@ -85,7 +57,6 @@ export default function PayersPage() {
         page,
         per_page: 20,
         faculty_id: facultyId,
-        group_id: groupId,
         status,
         search: search || undefined,
       });
@@ -107,30 +78,29 @@ export default function PayersPage() {
       newParams.delete(key);
     }
     if (key !== 'page') {
-      newParams.delete('page'); // Reset page on filter change
+      newParams.delete('page');
     }
     setSearchParams(newParams);
   };
 
-  const formatMoney = (amount: number) => {
-    return new Intl.NumberFormat('ru-RU', {
-      style: 'currency',
-      currency: 'RUB',
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
+  const formatMoney = (amount: number) =>
+    new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 }).format(amount);
 
-  // Get faculty/group names for display
   const getFacultyName = (id: number | null) => {
     if (!id) return '—';
     const faculty = faculties.find(f => f.id === id);
     return faculty?.short_name || faculty?.name || '—';
   };
 
-  const getGroupName = (id: number | null) => {
-    if (!id) return '—';
-    const group = groups.find(g => g.id === id);
-    return group?.name || '—';
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      await exportApi.exportPayersExcel({ faculty_id: facultyId, status, search: search || undefined });
+    } catch (error) {
+      console.error('Export failed:', error);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const formatDate = (dateStr: string | null) => {
@@ -146,18 +116,31 @@ export default function PayersPage() {
           <h1 className="text-xl md:text-2xl font-bold text-dark">Плательщики</h1>
           <p className="text-accent mt-1">Всего: {total} записей</p>
         </div>
-        {canEdit && (
-          <Link to="/add-payer" className="btn-primary w-full sm:w-auto justify-center">
-            + Добавить
-          </Link>
-        )}
+        <div className="flex gap-2 w-full sm:w-auto">
+          <button
+            onClick={handleExport}
+            disabled={isExporting}
+            className="btn-outline w-full sm:w-auto justify-center flex items-center gap-2 disabled:opacity-50"
+            title="Экспорт в Excel"
+          >
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            {isExporting ? 'Экспорт...' : 'Excel'}
+          </button>
+          {canEdit && (
+            <Link to="/add-payer" className="btn-primary w-full sm:w-auto justify-center">
+              + Добавить
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
       <div className="card mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           {/* Search */}
-          <div className="sm:col-span-2 lg:col-span-2">
+          <div className="sm:col-span-2">
             <input
               type="text"
               placeholder="Поиск по ФИО, email, телефону..."
@@ -167,16 +150,13 @@ export default function PayersPage() {
             />
           </div>
 
-          {/* Faculty Filter */}
+          {/* Деректорат Filter */}
           <select
             value={facultyId || ''}
-            onChange={(e) => {
-              updateFilter('faculty', e.target.value);
-              updateFilter('group', undefined);
-            }}
+            onChange={(e) => updateFilter('faculty', e.target.value)}
             className="input"
           >
-            <option value="">Все факультеты</option>
+            <option value="">Все деректораты</option>
             {faculties.map((f) => (
               <option key={f.id} value={f.id}>
                 {f.short_name || f.name}
@@ -184,21 +164,7 @@ export default function PayersPage() {
             ))}
           </select>
 
-          {/* Group Filter */}
-          <select
-            value={groupId || ''}
-            onChange={(e) => updateFilter('group', e.target.value)}
-            className="input"
-          >
-            <option value="">Все группы</option>
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
-          </select>
-
-          {/* Status Filter */}
+          {/* Статус — только 2 варианта */}
           <select
             value={status || ''}
             onChange={(e) => updateFilter('status', e.target.value)}
@@ -206,9 +172,7 @@ export default function PayersPage() {
           >
             <option value="">Все статусы</option>
             <option value="paid">Оплачено</option>
-            <option value="partial">Частично</option>
             <option value="unpaid">Не оплачено</option>
-            <option value="exempt">Освобождён</option>
           </select>
         </div>
       </div>
@@ -231,7 +195,7 @@ export default function PayersPage() {
                 <thead>
                   <tr className="border-b border-light-dark">
                     <th className="text-left py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider">ФИО</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider">Факультет</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider">Деректорат</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider">Группа</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider">Курс</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider">Д. рождения</th>
@@ -260,7 +224,7 @@ export default function PayersPage() {
                         )}
                       </td>
                       <td className="py-3 px-4 text-accent">{getFacultyName(payer.faculty_id)}</td>
-                      <td className="py-3 px-4 text-accent">{getGroupName(payer.group_id)}</td>
+                      <td className="py-3 px-4 text-accent font-medium">{payer.group_name || '—'}</td>
                       <td className="py-3 px-4 text-accent">{payer.course || '—'}</td>
                       <td className="py-3 px-4 text-accent">{formatDate(payer.date_of_birth)}</td>
                       <td className="py-3 px-4">
@@ -299,15 +263,14 @@ export default function PayersPage() {
                           <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">Б</span>
                         )}
                       </p>
-                      {payer.email && (
-                        <p className="text-xs text-accent truncate">{payer.email}</p>
-                      )}
+                      {payer.email && <p className="text-xs text-accent truncate">{payer.email}</p>}
                     </div>
                     <StatusBadge status={payer.status} />
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-accent">
-                      {getFacultyName(payer.faculty_id)} • {getGroupName(payer.group_id)}
+                      {getFacultyName(payer.faculty_id)}
+                      {payer.group_name && ` • ${payer.group_name}`}
                       {payer.course && ` • ${payer.course} курс`}
                       {payer.date_of_birth && ` • д.р. ${formatDate(payer.date_of_birth)}`}
                     </span>

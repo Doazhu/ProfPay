@@ -19,7 +19,7 @@ from backend.core.encryption import (
     encrypt_field, decrypt_field, encrypt_decimal, encrypt_date,
 )
 from backend.application.schemas import (
-    LoginRequest, TokenResponse, UserCreate, UserResponse, UserUpdate
+    LoginRequest, TokenResponse, UserCreate, UserResponse, UserUpdate, PasswordChange
 )
 from backend.domain.models import SystemUser, UserRole, Payer, Payment, AuditLog
 from backend.infrastructure.repositories import UserRepository
@@ -342,3 +342,71 @@ async def update_user(
         user.is_active = user_data.is_active
 
     return user_repo.update(user)
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: SystemUser = Depends(require_admin),
+):
+    """Delete a user (admin only). Cannot delete yourself."""
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete your own account",
+        )
+    user_repo = UserRepository(db)
+    user = user_repo.get_by_id(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    db.delete(user)
+    db.commit()
+
+
+@router.post("/change-password", status_code=status.HTTP_200_OK)
+async def change_password(
+    data: PasswordChange,
+    response: Response,
+    current_user: SystemUser = Depends(get_current_user),
+    master_key: bytes = Depends(get_encryption_key),
+    db: Session = Depends(get_db),
+):
+    """
+    Change the current user's password.
+    Re-wraps the master encryption key with the new password.
+    """
+    # Verify current password
+    if not verify_password(data.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Текущий пароль неверен",
+        )
+
+    # Re-wrap master key with new password
+    new_salt = generate_salt()
+    new_user_key = derive_user_key(data.new_password, new_salt)
+    new_wrapped_key = wrap_master_key(master_key, new_user_key)
+
+    # Update user in DB
+    user_repo = UserRepository(db)
+    current_user.hashed_password = get_password_hash(data.new_password)
+    current_user.encrypted_master_key = new_wrapped_key
+    current_user.key_salt = new_salt
+    user_repo.update(current_user)
+
+    # Re-issue encryption cookie with new wrapping
+    new_enc_key_cookie = encrypt_session_key(master_key)
+    response.set_cookie(
+        key="encryption_key",
+        value=new_enc_key_cookie,
+        httponly=settings.COOKIE_HTTPONLY,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+    )
+
+    return {"message": "Пароль успешно изменён"}

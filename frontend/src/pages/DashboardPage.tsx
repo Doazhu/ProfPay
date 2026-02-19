@@ -139,7 +139,6 @@ export default function DashboardPage() {
         <StatCard
           title="Оплатили"
           value={stats?.paid_count || 0}
-          subtitle={`${stats?.partial_count || 0} частично`}
           color="secondary"
           icon={<CheckIcon />}
         />
@@ -154,7 +153,7 @@ export default function DashboardPage() {
       {/* Faculty Stats */}
       <div className="card mb-6 md:mb-8">
         <div className="flex items-center justify-between mb-4 md:mb-6">
-          <h2 className="text-base md:text-lg font-semibold text-dark">Статистика по факультетам</h2>
+          <h2 className="text-base md:text-lg font-semibold text-dark">Статистика по деректоратам</h2>
           <Link to="/reports" className="text-sm text-primary hover:text-primary-dark active:text-primary-dark">
             Подробнее
           </Link>
@@ -165,7 +164,7 @@ export default function DashboardPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-light-dark">
-                <th className="text-left py-3 px-4 text-sm font-medium text-accent">Факультет</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-accent">Деректорат</th>
                 <th className="text-right py-3 px-4 text-sm font-medium text-accent">Всего</th>
                 <th className="text-right py-3 px-4 text-sm font-medium text-accent">Оплатили</th>
                 <th className="text-right py-3 px-4 text-sm font-medium text-accent">Должники</th>

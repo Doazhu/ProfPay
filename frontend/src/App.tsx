@@ -11,6 +11,8 @@ import DebtorsPage from './pages/DebtorsPage';
 import AddPayerPage from './pages/AddPayerPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
+import UsersPage from './pages/UsersPage';
+import ChangePasswordPage from './pages/ChangePasswordPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -52,11 +54,20 @@ function App() {
                 }
               />
               <Route path="reports" element={<ReportsPage />} />
+              <Route path="change-password" element={<ChangePasswordPage />} />
               <Route
                 path="settings"
                 element={
                   <ProtectedRoute requiredRole="admin">
                     <SettingsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="users"
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <UsersPage />
                   </ProtectedRoute>
                 }
               />

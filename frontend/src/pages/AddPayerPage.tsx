@@ -1,13 +1,30 @@
 import { useState, useEffect, useMemo, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Faculty, StudentGroup, PayerCreate, BudgetSettings } from '../types';
-import { payerApi, facultyApi, groupApi, budgetSettingsApi } from '../services/api';
+import type { Faculty, PayerCreate, BudgetSettings } from '../types';
+import { payerApi, facultyApi, budgetSettingsApi } from '../services/api';
+
+/** Возвращает текущий учебный год в формате "2025-2026" */
+function getCurrentAcademicYear(): string {
+  const now = new Date();
+  const month = now.getMonth() + 1; // 1-12
+  const year = now.getFullYear();
+  return month >= 9 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+}
+
+/** Пытается извлечь курс из кода группы вида "1-мд-35" */
+function parseCourseFromGroup(groupCode: string): number | undefined {
+  const match = groupCode.trim().match(/^(\d)/);
+  if (match) {
+    const c = parseInt(match[1]);
+    if (c >= 1 && c <= 6) return c;
+  }
+  return undefined;
+}
 
 export default function AddPayerPage() {
   const navigate = useNavigate();
 
   const [faculties, setFaculties] = useState<Faculty[]>([]);
-  const [groups, setGroups] = useState<StudentGroup[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -42,23 +59,25 @@ export default function AddPayerPage() {
     telegram: '',
     vk: '',
     faculty_id: undefined,
-    group_id: undefined,
+    group_name: '',
     course: undefined,
+    department: '',
     status: 'unpaid',
     notes: '',
   });
 
   useEffect(() => {
     loadFaculties();
-    loadAllGroups();
     loadBudgetDefaults();
   }, []);
 
+  // Auto-extract course when group_name changes
   useEffect(() => {
-    if (formData.faculty_id) {
-      loadGroups(formData.faculty_id);
+    if (formData.group_name && !formData.course) {
+      const c = parseCourseFromGroup(formData.group_name);
+      if (c) setFormData(prev => ({ ...prev, course: c }));
     }
-  }, [formData.faculty_id]);
+  }, [formData.group_name]);
 
   const loadFaculties = async () => {
     try {
@@ -66,24 +85,6 @@ export default function AddPayerPage() {
       setFaculties(data);
     } catch (error) {
       console.error('Failed to load faculties:', error);
-    }
-  };
-
-  const loadAllGroups = async () => {
-    try {
-      const data = await groupApi.getAll();
-      setGroups(data);
-    } catch (error) {
-      console.error('Failed to load groups:', error);
-    }
-  };
-
-  const loadGroups = async (facultyId: number) => {
-    try {
-      const data = await groupApi.getAll(facultyId);
-      setGroups(data);
-    } catch (error) {
-      console.error('Failed to load groups:', error);
     }
   };
 
@@ -123,8 +124,9 @@ export default function AddPayerPage() {
         stipend_amount: isBudget && stipendAmount ? Number(stipendAmount) : undefined,
         budget_percent: isBudget && budgetPercent ? Number(budgetPercent) : undefined,
         faculty_id: formData.faculty_id ? Number(formData.faculty_id) : undefined,
-        group_id: formData.group_id ? Number(formData.group_id) : undefined,
+        group_name: formData.group_name || undefined,
         course: formData.course ? Number(formData.course) : undefined,
+        department: formData.department || undefined,
       });
       navigate(`/payers/${payer.id}`);
     } catch (err: unknown) {
@@ -140,7 +142,7 @@ export default function AddPayerPage() {
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-dark">Добавить плательщика</h1>
-        <p className="text-accent mt-1">Регистрация нового члена профсоюза</p>
+        <p className="text-accent mt-1">Регистрация нового члена профсоюза — СПБГУПТД</p>
       </div>
 
       {/* Form */}
@@ -156,9 +158,7 @@ export default function AddPayerPage() {
           <h2 className="text-lg font-semibold text-dark mb-4">Личные данные</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-accent mb-1">
-                Фамилия *
-              </label>
+              <label className="block text-sm font-medium text-accent mb-1">Фамилия *</label>
               <input
                 type="text"
                 name="last_name"
@@ -169,9 +169,7 @@ export default function AddPayerPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-accent mb-1">
-                Имя *
-              </label>
+              <label className="block text-sm font-medium text-accent mb-1">Имя *</label>
               <input
                 type="text"
                 name="first_name"
@@ -182,9 +180,7 @@ export default function AddPayerPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-accent mb-1">
-                Отчество
-              </label>
+              <label className="block text-sm font-medium text-accent mb-1">Отчество</label>
               <input
                 type="text"
                 name="middle_name"
@@ -195,9 +191,7 @@ export default function AddPayerPage() {
             </div>
           </div>
           <div className="mt-4" style={{ maxWidth: '220px' }}>
-            <label className="block text-sm font-medium text-accent mb-1">
-              Дата рождения
-            </label>
+            <label className="block text-sm font-medium text-accent mb-1">Дата рождения</label>
             <input
               type="date"
               name="date_of_birth"
@@ -213,22 +207,18 @@ export default function AddPayerPage() {
           <h2 className="text-lg font-semibold text-dark mb-4">Контактные данные</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-accent mb-1">
-                Email
-              </label>
+              <label className="block text-sm font-medium text-accent mb-1">Email</label>
               <input
                 type="email"
                 name="email"
                 value={formData.email || ''}
                 onChange={handleChange}
                 className="input"
-                placeholder="student@university.ru"
+                placeholder="student@spbguptd.ru"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-accent mb-1">
-                Телефон
-              </label>
+              <label className="block text-sm font-medium text-accent mb-1">Телефон</label>
               <input
                 type="tel"
                 name="phone"
@@ -239,9 +229,7 @@ export default function AddPayerPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-accent mb-1">
-                Telegram
-              </label>
+              <label className="block text-sm font-medium text-accent mb-1">Telegram</label>
               <input
                 type="text"
                 name="telegram"
@@ -252,9 +240,7 @@ export default function AddPayerPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-accent mb-1">
-                VK
-              </label>
+              <label className="block text-sm font-medium text-accent mb-1">VK</label>
               <input
                 type="text"
                 name="vk"
@@ -271,10 +257,9 @@ export default function AddPayerPage() {
         <div className="mb-6">
           <h2 className="text-lg font-semibold text-dark mb-4">Данные обучения</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Деректорат (бывший факультет) */}
             <div>
-              <label className="block text-sm font-medium text-accent mb-1">
-                Факультет
-              </label>
+              <label className="block text-sm font-medium text-accent mb-1">Деректорат</label>
               <select
                 name="faculty_id"
                 value={formData.faculty_id || ''}
@@ -284,60 +269,86 @@ export default function AddPayerPage() {
                 <option value="">Не указан</option>
                 {faculties.map((f) => (
                   <option key={f.id} value={f.id}>
-                    {f.name}
+                    {f.short_name ? `${f.short_name} — ${f.name}` : f.name}
                   </option>
                 ))}
               </select>
             </div>
+
+            {/* Кафедра (опционально) */}
+            <div>
+              <label className="block text-sm font-medium text-accent mb-1">
+                Кафедра <span className="text-accent/60 font-normal">(необязательно)</span>
+              </label>
+              <input
+                type="text"
+                name="department"
+                value={formData.department || ''}
+                onChange={handleChange}
+                className="input"
+                placeholder="Например: ЦИАТ"
+              />
+            </div>
+
+            {/* Группа — свободный ввод */}
             <div>
               <label className="block text-sm font-medium text-accent mb-1">
                 Группа
+                <span className="text-xs text-accent/60 ml-1 font-normal">(формат: 1-мд-35)</span>
               </label>
-              <select
-                name="group_id"
-                value={formData.group_id || ''}
+              <input
+                type="text"
+                name="group_name"
+                value={formData.group_name || ''}
                 onChange={handleChange}
                 className="input"
-              >
-                <option value="">Не указана</option>
-                {groups.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name} {g.course ? `(${g.course} курс)` : ''}
-                  </option>
-                ))}
-              </select>
+                placeholder="Например: 1-мд-35"
+              />
+              <p className="text-xs text-accent/70 mt-1">Курс определяется автоматически из кода группы</p>
             </div>
+
+            {/* Курс */}
             <div>
-              <label className="block text-sm font-medium text-accent mb-1">
-                Курс
-              </label>
-              <select
+              <label className="block text-sm font-medium text-accent mb-1">Курс</label>
+              <input
+                type="number"
                 name="course"
                 value={formData.course || ''}
                 onChange={handleChange}
                 className="input"
-              >
-                <option value="">Не указан</option>
-                {[1, 2, 3, 4, 5, 6].map((c) => (
-                  <option key={c} value={c}>{c} курс</option>
-                ))}
-              </select>
+                placeholder="1–6"
+                min="1"
+                max="6"
+              />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-accent mb-1">
-                Статус оплаты
-              </label>
-              <select
-                name="status"
-                value={formData.status}
-                onChange={handleChange}
-                className="input"
-              >
-                <option value="unpaid">Не оплачено</option>
-                <option value="partial">Частично оплачено</option>
-                <option value="paid">Оплачено</option>
-                <option value="exempt">Освобождён от оплаты</option>
-              </select>
+
+            {/* Статус оплаты — только 2 варианта */}
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-accent mb-2">Статус оплаты</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="status"
+                    value="unpaid"
+                    checked={formData.status === 'unpaid'}
+                    onChange={handleChange}
+                    className="w-4 h-4 text-red-600"
+                  />
+                  <span className="text-dark">Не оплачено</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="status"
+                    value="paid"
+                    checked={formData.status === 'paid'}
+                    onChange={handleChange}
+                    className="w-4 h-4 text-green-600"
+                  />
+                  <span className="text-dark">Оплачено</span>
+                </label>
+              </div>
             </div>
           </div>
         </div>
@@ -363,9 +374,7 @@ export default function AddPayerPage() {
               </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-accent mb-1">
-                    Стипендия
-                  </label>
+                  <label className="block text-sm font-medium text-accent mb-1">Стипендия</label>
                   <input
                     type="number"
                     value={stipendAmount}
@@ -377,9 +386,7 @@ export default function AddPayerPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-accent mb-1">
-                    Процент (%)
-                  </label>
+                  <label className="block text-sm font-medium text-accent mb-1">Процент (%)</label>
                   <input
                     type="number"
                     value={budgetPercent}
@@ -392,9 +399,7 @@ export default function AddPayerPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-accent mb-1">
-                    К оплате
-                  </label>
+                  <label className="block text-sm font-medium text-accent mb-1">К оплате</label>
                   <div className="input bg-white flex items-center">
                     <span className={`font-bold text-lg ${budgetPayment > 0 ? 'text-primary' : 'text-accent'}`}>
                       {budgetPayment > 0
@@ -422,9 +427,7 @@ export default function AddPayerPage() {
 
         {/* Notes */}
         <div className="mb-6">
-          <label className="block text-sm font-medium text-accent mb-1">
-            Примечания
-          </label>
+          <label className="block text-sm font-medium text-accent mb-1">Примечания</label>
           <textarea
             name="notes"
             value={formData.notes || ''}
@@ -436,18 +439,10 @@ export default function AddPayerPage() {
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-4 pt-4 border-t border-light-dark">
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="btn-ghost"
-          >
+          <button type="button" onClick={() => navigate(-1)} className="btn-ghost">
             Отмена
           </button>
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="btn-primary disabled:opacity-50"
-          >
+          <button type="submit" disabled={isLoading} className="btn-primary disabled:opacity-50">
             {isLoading ? 'Сохранение...' : 'Сохранить'}
           </button>
         </div>

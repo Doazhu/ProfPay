@@ -12,8 +12,8 @@ export interface User {
   last_login: string | null;
 }
 
-// Payment status
-export type PaymentStatus = 'paid' | 'partial' | 'unpaid' | 'exempt';
+// Payment status (2 main: paid / unpaid; partial & exempt kept for backend compatibility)
+export type PaymentStatus = 'paid' | 'unpaid' | 'partial' | 'exempt';
 
 // Semester type
 export type SemesterType = 'fall' | 'spring';
@@ -73,7 +73,9 @@ export interface Payer {
   vk: string | null;
   faculty_id: number | null;
   group_id: number | null;
+  group_name: string | null;   // Free-form group code e.g. "1-мд-35"
   course: number | null;
+  department: string | null;   // Кафедра abbreviation e.g. "ЦИАТ", optional
   status: PaymentStatus;
   membership_start: string | null;
   membership_end: string | null;
@@ -166,7 +168,9 @@ export interface PayerCreate {
   vk?: string;
   faculty_id?: number;
   group_id?: number;
+  group_name?: string;    // Free-form group code e.g. "1-мд-35"
   course?: number;
+  department?: string;    // Кафедра e.g. "ЦИАТ", optional
   status?: PaymentStatus;
   membership_start?: string;
   membership_end?: string;

@@ -1,17 +1,23 @@
 import { useEffect, useState } from 'react';
-import type { Faculty, StudentGroup, PaymentSettings, BudgetSettings } from '../types';
-import { facultyApi, groupApi, paymentSettingsApi, budgetSettingsApi } from '../services/api';
+import type { Faculty, PaymentSettings, BudgetSettings } from '../types';
+import { facultyApi, paymentSettingsApi, budgetSettingsApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+
+/** Возвращает текущий учебный год в формате "2025-2026" */
+function getCurrentAcademicYear(): string {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+  return month >= 9 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+}
 
 export default function SettingsPage() {
   const { isAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState<'faculties' | 'groups' | 'payment' | 'budget'>('faculties');
+  const [activeTab, setActiveTab] = useState<'faculties' | 'payment' | 'budget'>('faculties');
 
   // Data
   const [faculties, setFaculties] = useState<Faculty[]>([]);
-  const [groups, setGroups] = useState<StudentGroup[]>([]);
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings[]>([]);
-  const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Faculty form
@@ -21,13 +27,6 @@ export default function SettingsPage() {
   const [editFacultyName, setEditFacultyName] = useState('');
   const [editFacultyShort, setEditFacultyShort] = useState('');
 
-  // Group form
-  const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupCourse, setNewGroupCourse] = useState<number | undefined>(undefined);
-  const [editingGroupId, setEditingGroupId] = useState<number | null>(null);
-  const [editGroupName, setEditGroupName] = useState('');
-  const [editGroupCourse, setEditGroupCourse] = useState<number | undefined>(undefined);
-
   // Budget settings
   const [budgetSettings, setBudgetSettings] = useState<BudgetSettings>({
     default_budget_percent: '1',
@@ -36,8 +35,8 @@ export default function SettingsPage() {
   const [budgetSaving, setBudgetSaving] = useState(false);
   const [budgetSaved, setBudgetSaved] = useState(false);
 
-  // Payment settings form
-  const [newAcademicYear, setNewAcademicYear] = useState('');
+  // Payment settings form — текущий год по умолчанию
+  const [newAcademicYear, setNewAcademicYear] = useState(getCurrentAcademicYear());
   const [newFallAmount, setNewFallAmount] = useState('');
   const [newSpringAmount, setNewSpringAmount] = useState('');
   const [newCurrency, setNewCurrency] = useState('RUB');
@@ -52,14 +51,12 @@ export default function SettingsPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [facultyData, groupData, settingsData, budgetData] = await Promise.all([
+      const [facultyData, settingsData, budgetData] = await Promise.all([
         facultyApi.getAll(false),
-        groupApi.getAll(undefined, false),
         paymentSettingsApi.getAll(),
         budgetSettingsApi.get().catch(() => ({ default_budget_percent: '1', default_stipend_amount: '' })),
       ]);
       setFaculties(facultyData);
-      setGroups(groupData);
       setPaymentSettings(settingsData);
       setBudgetSettings(budgetData);
     } catch (error) {
@@ -69,7 +66,8 @@ export default function SettingsPage() {
     }
   };
 
-  // Faculty handlers
+  // ============ Faculty (Деректорат) handlers ============
+
   const handleAddFaculty = async () => {
     if (!newFacultyName.trim()) return;
     try {
@@ -79,8 +77,7 @@ export default function SettingsPage() {
       });
       setNewFacultyName('');
       setNewFacultyShort('');
-      const data = await facultyApi.getAll(false);
-      setFaculties(data);
+      setFaculties(await facultyApi.getAll(false));
     } catch (error) {
       console.error('Failed to create faculty:', error);
     }
@@ -100,8 +97,7 @@ export default function SettingsPage() {
         short_name: editFacultyShort || undefined,
       });
       setEditingFacultyId(null);
-      const data = await facultyApi.getAll(false);
-      setFaculties(data);
+      setFaculties(await facultyApi.getAll(false));
     } catch (error) {
       console.error('Failed to update faculty:', error);
     }
@@ -110,71 +106,24 @@ export default function SettingsPage() {
   const handleToggleFacultyActive = async (faculty: Faculty) => {
     try {
       await facultyApi.update(faculty.id, { is_active: !faculty.is_active });
-      const data = await facultyApi.getAll(false);
-      setFaculties(data);
+      setFaculties(await facultyApi.getAll(false));
     } catch (error) {
       console.error('Failed to toggle faculty:', error);
     }
   };
 
-  // Group handlers
-  const handleAddGroup = async () => {
-    if (!newGroupName.trim()) {
-      alert('Введите название группы');
-      return;
-    }
-    if (!selectedFacultyId) {
-      alert('Выберите факультет для группы');
-      return;
-    }
+  const handleDeleteFaculty = async (faculty: Faculty) => {
+    if (!confirm(`Удалить деректорат "${faculty.name}"?\nЭто действие деактивирует его и скроет из всех выпадающих списков.`)) return;
     try {
-      await groupApi.create({
-        name: newGroupName,
-        faculty_id: selectedFacultyId,
-        course: newGroupCourse,
-      });
-      setNewGroupName('');
-      setNewGroupCourse(undefined);
-      const data = await groupApi.getAll(undefined, false);
-      setGroups(data);
+      await facultyApi.delete(faculty.id);
+      setFaculties(await facultyApi.getAll(false));
     } catch (error: any) {
-      console.error('Failed to create group:', error);
-      alert(error.response?.data?.detail || 'Ошибка при создании группы');
+      alert(error.response?.data?.detail || 'Ошибка при удалении деректората');
     }
   };
 
-  const handleEditGroup = (group: StudentGroup) => {
-    setEditingGroupId(group.id);
-    setEditGroupName(group.name);
-    setEditGroupCourse(group.course || undefined);
-  };
+  // ============ Payment Settings handlers ============
 
-  const handleSaveGroup = async () => {
-    if (!editingGroupId) return;
-    try {
-      await groupApi.update(editingGroupId, {
-        name: editGroupName,
-        course: editGroupCourse,
-      });
-      setEditingGroupId(null);
-      const data = await groupApi.getAll(undefined, false);
-      setGroups(data);
-    } catch (error) {
-      console.error('Failed to update group:', error);
-    }
-  };
-
-  const handleToggleGroupActive = async (group: StudentGroup) => {
-    try {
-      await groupApi.update(group.id, { is_active: !group.is_active });
-      const data = await groupApi.getAll(undefined, false);
-      setGroups(data);
-    } catch (error) {
-      console.error('Failed to toggle group:', error);
-    }
-  };
-
-  // Payment settings handlers
   const handleAddPaymentSettings = async () => {
     if (!newAcademicYear || !newFallAmount || !newSpringAmount) return;
     try {
@@ -184,13 +133,12 @@ export default function SettingsPage() {
         fall_amount: Number(newFallAmount),
         spring_amount: Number(newSpringAmount),
       });
-      setNewAcademicYear('');
+      setNewAcademicYear(getCurrentAcademicYear());
       setNewFallAmount('');
       setNewSpringAmount('');
-      const data = await paymentSettingsApi.getAll();
-      setPaymentSettings(data);
-    } catch (error) {
-      console.error('Failed to create payment settings:', error);
+      setPaymentSettings(await paymentSettingsApi.getAll());
+    } catch (error: any) {
+      alert(error.response?.data?.detail || 'Ошибка при создании настроек');
     }
   };
 
@@ -208,8 +156,7 @@ export default function SettingsPage() {
         spring_amount: Number(editSpringAmount),
       });
       setEditingSettingsId(null);
-      const data = await paymentSettingsApi.getAll();
-      setPaymentSettings(data);
+      setPaymentSettings(await paymentSettingsApi.getAll());
     } catch (error) {
       console.error('Failed to update payment settings:', error);
     }
@@ -219,32 +166,23 @@ export default function SettingsPage() {
     if (!confirm('Удалить настройки оплаты?')) return;
     try {
       await paymentSettingsApi.delete(id);
-      const data = await paymentSettingsApi.getAll();
-      setPaymentSettings(data);
+      setPaymentSettings(await paymentSettingsApi.getAll());
     } catch (error) {
       console.error('Failed to delete payment settings:', error);
     }
   };
 
-  const formatMoney = (amount: number) => {
-    return new Intl.NumberFormat('ru-RU', {
-      style: 'currency',
-      currency: 'RUB',
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
+  const formatMoney = (amount: number) =>
+    new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 }).format(amount);
 
-  // Generate academic year options
+  // Academic year options (current ± 2)
   const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
+  const baseYear = currentMonth >= 9 ? currentYear : currentYear - 1;
   const yearOptions = Array.from({ length: 5 }, (_, i) => {
-    const year = currentYear - 2 + i;
-    return `${year}-${year + 1}`;
+    const y = baseYear - 2 + i;
+    return `${y}-${y + 1}`;
   });
-
-  // Filter groups by faculty
-  const filteredGroups = selectedFacultyId
-    ? groups.filter(g => g.faculty_id === selectedFacultyId)
-    : groups;
 
   if (!isAdmin) {
     return (
@@ -271,81 +209,66 @@ export default function SettingsPage() {
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-dark">Настройки системы</h1>
-        <p className="text-accent mt-1">Управление справочниками и настройками</p>
+        <p className="text-accent mt-1">Управление справочниками и настройками — СПБГУПТД</p>
       </div>
 
       {/* Tabs */}
       <div className="flex flex-wrap gap-2 mb-6">
-        <button
-          onClick={() => setActiveTab('faculties')}
-          className={`px-3 md:px-4 py-2 rounded-lg font-medium text-sm md:text-base transition-all duration-200 ${
-            activeTab === 'faculties'
-              ? 'bg-primary text-white shadow-md shadow-primary/25'
-              : 'bg-light-dark text-accent hover:bg-light-darker active:bg-light-darker'
-          }`}
-        >
-          Факультеты
-        </button>
-        <button
-          onClick={() => setActiveTab('groups')}
-          className={`px-3 md:px-4 py-2 rounded-lg font-medium text-sm md:text-base transition-all duration-200 ${
-            activeTab === 'groups'
-              ? 'bg-primary text-white shadow-md shadow-primary/25'
-              : 'bg-light-dark text-accent hover:bg-light-darker active:bg-light-darker'
-          }`}
-        >
-          Группы
-        </button>
-        <button
-          onClick={() => setActiveTab('payment')}
-          className={`px-3 md:px-4 py-2 rounded-lg font-medium text-sm md:text-base transition-all duration-200 ${
-            activeTab === 'payment'
-              ? 'bg-primary text-white shadow-md shadow-primary/25'
-              : 'bg-light-dark text-accent hover:bg-light-darker active:bg-light-darker'
-          }`}
-        >
-          Оплата
-        </button>
-        <button
-          onClick={() => setActiveTab('budget')}
-          className={`px-3 md:px-4 py-2 rounded-lg font-medium text-sm md:text-base transition-all duration-200 ${
-            activeTab === 'budget'
-              ? 'bg-primary text-white shadow-md shadow-primary/25'
-              : 'bg-light-dark text-accent hover:bg-light-darker active:bg-light-darker'
-          }`}
-        >
-          Бюджетники
-        </button>
+        {([
+          { key: 'faculties', label: 'Деректораты' },
+          { key: 'payment', label: 'Оплата' },
+          { key: 'budget', label: 'Бюджетники' },
+        ] as const).map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-3 md:px-4 py-2 rounded-lg font-medium text-sm md:text-base transition-all duration-200 ${
+              activeTab === tab.key
+                ? 'bg-primary text-white shadow-md shadow-primary/25'
+                : 'bg-light-dark text-accent hover:bg-light-darker active:bg-light-darker'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* Faculties Tab */}
+      {/* ===== Деректораты Tab ===== */}
       {activeTab === 'faculties' && (
         <div className="card animate-fade-in-fast">
-          <h2 className="text-base md:text-lg font-semibold text-dark mb-4">Факультеты</h2>
+          <h2 className="text-base md:text-lg font-semibold text-dark mb-4">Деректораты</h2>
+          <p className="text-sm text-accent mb-4">
+            Например: ИИТА — Институт информационных технологий и автоматизации
+          </p>
 
-          {/* Add Faculty Form */}
+          {/* Add Form */}
           <div className="flex flex-col sm:flex-row gap-2 mb-4">
             <input
               type="text"
               value={newFacultyName}
               onChange={(e) => setNewFacultyName(e.target.value)}
-              placeholder="Название факультета"
+              placeholder="Полное название деректората"
               className="input flex-1"
+              onKeyDown={(e) => e.key === 'Enter' && handleAddFaculty()}
             />
             <input
               type="text"
               value={newFacultyShort}
               onChange={(e) => setNewFacultyShort(e.target.value)}
-              placeholder="Сокр."
+              placeholder="Аббр."
               className="input w-full sm:w-24"
+              onKeyDown={(e) => e.key === 'Enter' && handleAddFaculty()}
             />
             <button onClick={handleAddFaculty} className="btn-primary w-full sm:w-auto justify-center">
               + Добавить
             </button>
           </div>
 
-          {/* Faculty List */}
+          {/* List */}
           <div className="space-y-2">
+            {faculties.length === 0 && (
+              <p className="text-center text-accent py-4">Нет деректоратов. Добавьте первый выше.</p>
+            )}
             {faculties.map((faculty) => (
               <div
                 key={faculty.id}
@@ -360,6 +283,7 @@ export default function SettingsPage() {
                       value={editFacultyName}
                       onChange={(e) => setEditFacultyName(e.target.value)}
                       className="input flex-1"
+                      autoFocus
                     />
                     <input
                       type="text"
@@ -392,17 +316,23 @@ export default function SettingsPage() {
                       </span>
                       <button
                         onClick={() => handleEditFaculty(faculty)}
-                        className="text-primary hover:text-primary-dark active:text-primary-dark text-sm py-1"
+                        className="text-primary hover:text-primary-dark text-sm py-1"
                       >
                         Изменить
                       </button>
                       <button
                         onClick={() => handleToggleFacultyActive(faculty)}
                         className={`text-sm py-1 ${
-                          faculty.is_active ? 'text-red-600 hover:text-red-700' : 'text-green-600 hover:text-green-700'
+                          faculty.is_active ? 'text-orange-500 hover:text-orange-600' : 'text-green-600 hover:text-green-700'
                         }`}
                       >
                         {faculty.is_active ? 'Деактив.' : 'Активир.'}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteFaculty(faculty)}
+                        className="text-red-600 hover:text-red-700 text-sm py-1"
+                      >
+                        Удалить
                       </button>
                     </div>
                   </div>
@@ -413,147 +343,15 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Groups Tab */}
-      {activeTab === 'groups' && (
-        <div className="card animate-fade-in-fast">
-          <h2 className="text-base md:text-lg font-semibold text-dark mb-4">Группы</h2>
-
-          {/* Faculty filter */}
-          <div className="mb-4">
-            <select
-              value={selectedFacultyId || ''}
-              onChange={(e) => setSelectedFacultyId(e.target.value ? Number(e.target.value) : null)}
-              className="input"
-            >
-              <option value="">Все факультеты</option>
-              {faculties.filter(f => f.is_active).map((f) => (
-                <option key={f.id} value={f.id}>{f.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Add Group Form */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 md:p-4 mb-4">
-            <p className="text-sm text-blue-800 mb-3">
-              <strong>Важно:</strong> Для создания группы необходимо выбрать факультет выше
-            </p>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <input
-                type="text"
-                value={newGroupName}
-                onChange={(e) => setNewGroupName(e.target.value)}
-                placeholder="Название группы (например: ИВТ-21)"
-                className="input flex-1"
-                disabled={!selectedFacultyId}
-              />
-              <select
-                value={newGroupCourse || ''}
-                onChange={(e) => setNewGroupCourse(e.target.value ? Number(e.target.value) : undefined)}
-                className="input w-full sm:w-28"
-                disabled={!selectedFacultyId}
-              >
-                <option value="">Курс</option>
-                {[1, 2, 3, 4, 5, 6].map((c) => (
-                  <option key={c} value={c}>{c} курс</option>
-                ))}
-              </select>
-              <button
-                onClick={handleAddGroup}
-                className="btn-primary w-full sm:w-auto justify-center"
-                disabled={!selectedFacultyId}
-              >
-                + Добавить
-              </button>
-            </div>
-          </div>
-
-          {/* Group List */}
-          <div className="space-y-2 max-h-80 md:max-h-96 overflow-y-auto scrollbar-thin">
-            {filteredGroups.length === 0 ? (
-              <p className="text-center text-accent py-4">Нет групп</p>
-            ) : (
-              filteredGroups.map((group) => (
-                <div
-                  key={group.id}
-                  className={`p-3 rounded-lg border ${
-                    group.is_active ? 'border-light-dark' : 'border-red-200 bg-red-50/50'
-                  }`}
-                >
-                  {editingGroupId === group.id ? (
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <input
-                        type="text"
-                        value={editGroupName}
-                        onChange={(e) => setEditGroupName(e.target.value)}
-                        className="input flex-1"
-                      />
-                      <select
-                        value={editGroupCourse || ''}
-                        onChange={(e) => setEditGroupCourse(e.target.value ? Number(e.target.value) : undefined)}
-                        className="input w-full sm:w-28"
-                      >
-                        <option value="">Курс</option>
-                        {[1, 2, 3, 4, 5, 6].map((c) => (
-                          <option key={c} value={c}>{c} курс</option>
-                        ))}
-                      </select>
-                      <div className="flex gap-2">
-                        <button onClick={handleSaveGroup} className="btn-primary flex-1 sm:flex-none justify-center">
-                          Сохранить
-                        </button>
-                        <button onClick={() => setEditingGroupId(null)} className="btn-ghost flex-1 sm:flex-none justify-center">
-                          Отмена
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-medium text-dark">{group.name}</p>
-                        <p className="text-sm text-accent truncate">
-                          {group.faculty?.short_name || group.faculty?.name || 'Факультет не указан'}
-                          {group.course && ` • ${group.course} курс`}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className={`text-xs px-2 py-1 rounded ${
-                          group.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                        }`}>
-                          {group.is_active ? 'Активна' : 'Неактивна'}
-                        </span>
-                        <button
-                          onClick={() => handleEditGroup(group)}
-                          className="text-primary hover:text-primary-dark active:text-primary-dark text-sm py-1"
-                        >
-                          Изменить
-                        </button>
-                        <button
-                          onClick={() => handleToggleGroupActive(group)}
-                          className={`text-sm py-1 ${
-                            group.is_active ? 'text-red-600 hover:text-red-700' : 'text-green-600 hover:text-green-700'
-                          }`}
-                        >
-                          {group.is_active ? 'Деактив.' : 'Активир.'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Payment Settings Tab */}
+      {/* ===== Payment Settings Tab ===== */}
       {activeTab === 'payment' && (
         <div className="card animate-fade-in-fast">
-          <h2 className="text-base md:text-lg font-semibold text-dark mb-4">Настройки оплаты по семестрам</h2>
+          <h2 className="text-base md:text-lg font-semibold text-dark mb-2">Настройки оплаты по семестрам</h2>
           <p className="text-accent text-sm mb-4">
-            Укажите сумму оплаты за каждый семестр для каждого учебного года
+            Текущий учебный год: <strong>{getCurrentAcademicYear()}</strong>
           </p>
 
-          {/* Add Payment Settings Form */}
+          {/* Add Form */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 mb-6 p-3 md:p-4 bg-light-dark/30 rounded-lg">
             <select
               value={newAcademicYear}
@@ -587,29 +385,22 @@ export default function SettingsPage() {
               className="input"
             >
               <option value="RUB">RUB (₽)</option>
-              <option value="USD">USD ($)</option>
-              <option value="EUR">EUR (€)</option>
             </select>
             <button onClick={handleAddPaymentSettings} className="btn-primary justify-center">
               + Добавить
             </button>
           </div>
 
-          {/* Payment Settings List */}
+          {/* List */}
           <div className="space-y-3">
             {paymentSettings.length === 0 ? (
-              <p className="text-center text-accent py-4">Нет настроек оплаты</p>
+              <p className="text-center text-accent py-4">Нет настроек оплаты. Добавьте первый учебный год выше.</p>
             ) : (
               paymentSettings.map((settings) => (
-                <div
-                  key={settings.id}
-                  className="p-3 md:p-4 rounded-lg border border-light-dark"
-                >
+                <div key={settings.id} className="p-3 md:p-4 rounded-lg border border-light-dark">
                   {editingSettingsId === settings.id ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                      <div className="font-medium text-dark py-2">
-                        {settings.academic_year}
-                      </div>
+                      <div className="font-medium text-dark py-2">{settings.academic_year}</div>
                       <input
                         type="number"
                         value={editFallAmount}
@@ -617,6 +408,7 @@ export default function SettingsPage() {
                         placeholder="Осень"
                         className="input"
                         min="0"
+                        autoFocus
                       />
                       <input
                         type="number"
@@ -637,11 +429,15 @@ export default function SettingsPage() {
                     </div>
                   ) : (
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                      {/* Mobile: stacked layout */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1">
                         <div>
                           <p className="text-xs md:text-sm text-accent">Учебный год</p>
-                          <p className="font-semibold text-dark">{settings.academic_year}</p>
+                          <p className="font-semibold text-dark">
+                            {settings.academic_year}
+                            {settings.academic_year === getCurrentAcademicYear() && (
+                              <span className="ml-2 text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">текущий</span>
+                            )}
+                          </p>
                         </div>
                         <div>
                           <p className="text-xs md:text-sm text-accent">Осенний семестр</p>
@@ -659,13 +455,13 @@ export default function SettingsPage() {
                       <div className="flex gap-2 lg:ml-4">
                         <button
                           onClick={() => handleEditPaymentSettings(settings)}
-                          className="text-primary hover:text-primary-dark active:text-primary-dark text-sm py-1"
+                          className="text-primary hover:text-primary-dark text-sm py-1"
                         >
                           Изменить
                         </button>
                         <button
                           onClick={() => handleDeletePaymentSettings(settings.id)}
-                          className="text-red-600 hover:text-red-700 active:text-red-700 text-sm py-1"
+                          className="text-red-600 hover:text-red-700 text-sm py-1"
                         >
                           Удалить
                         </button>
@@ -679,18 +475,18 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Budget Settings Tab */}
+      {/* ===== Budget Settings Tab ===== */}
       {activeTab === 'budget' && (
         <div className="card animate-fade-in-fast">
           <h2 className="text-base md:text-lg font-semibold text-dark mb-2">Настройки для бюджетников</h2>
           <p className="text-accent text-sm mb-6">
-            Шаблонные значения стипендии и процента, которые автоматически подставляются при создании плательщика-бюджетника.
+            Шаблонные значения стипендии и процента, подставляемые при добавлении бюджетника.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg">
             <div>
               <label className="block text-sm font-medium text-accent mb-1">
-                Стипендия по умолчанию
+                Стипендия по умолчанию (₽)
               </label>
               <input
                 type="number"
@@ -762,8 +558,8 @@ export default function SettingsPage() {
       {/* Info */}
       <div className="mt-6 p-3 md:p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
         <p className="text-sm text-yellow-800">
-          <strong>Примечание:</strong> Деактивация факультетов и групп не удаляет связанные данные.
-          Неактивные записи не отображаются в выпадающих списках при создании плательщиков.
+          <strong>Примечание:</strong> Деактивация деректората скрывает его из выпадающих списков, но не удаляет связанные данные плательщиков.
+          Полное удаление возможно только если нет привязанных плательщиков.
         </p>
       </div>
     </div>

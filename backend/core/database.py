@@ -128,18 +128,18 @@ def init_db() -> None:
             ).first()
 
             if not existing_admin:
-                # Create admin user
+                admin_password = settings.ADMIN_PASSWORD
                 admin = SystemUser(
-                    username="admin",
+                    username=settings.ADMIN_USERNAME,
                     email="admin@profpay.local",
-                    hashed_password=get_password_hash("admin123"),
+                    hashed_password=get_password_hash(admin_password),
                     full_name="Администратор системы",
                     role=UserRole.ADMIN,
                     is_active=True
                 )
                 db.add(admin)
                 db.commit()
-                print("Admin user created (username: admin, password: admin123)")
+                print(f"Admin user created (username: {settings.ADMIN_USERNAME})")
             else:
                 print("Admin user already exists")
 

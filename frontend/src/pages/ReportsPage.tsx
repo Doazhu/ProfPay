@@ -124,14 +124,14 @@ export default function ReportsPage() {
 
       {/* Faculty Stats */}
       <div className="card mb-6 md:mb-8">
-        <h2 className="text-base md:text-lg font-semibold text-dark mb-4">Статистика по факультетам</h2>
+        <h2 className="text-base md:text-lg font-semibold text-dark mb-4">Статистика по деректоратам</h2>
 
         {/* Desktop table */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-light-dark">
-                <th className="text-left py-3 px-4 text-sm font-medium text-accent">Факультет</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-accent">Деректорат</th>
                 <th className="text-right py-3 px-4 text-sm font-medium text-accent">Всего</th>
                 <th className="text-right py-3 px-4 text-sm font-medium text-accent">Оплатили</th>
                 <th className="text-right py-3 px-4 text-sm font-medium text-accent">Должники</th>
@@ -215,7 +215,7 @@ export default function ReportsPage() {
             onChange={(e) => setSelectedYear(Number(e.target.value))}
             className="input w-full sm:w-32"
           >
-            {[2024, 2023, 2022].map((year) => (
+            {Array.from({ length: 4 }, (_, i) => new Date().getFullYear() - i).map((year) => (
               <option key={year} value={year}>{year}</option>
             ))}
           </select>

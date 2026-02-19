@@ -87,6 +87,42 @@ export const authApi = {
     const { data } = await api.post('/auth/refresh');
     return data;
   },
+
+  changePassword: async (currentPassword: string, newPassword: string): Promise<void> => {
+    await api.post('/auth/change-password', {
+      current_password: currentPassword,
+      new_password: newPassword,
+    });
+  },
+};
+
+// ============== User Management API ==============
+
+export const userApi = {
+  getAll: async (): Promise<User[]> => {
+    const { data } = await api.get('/auth/users');
+    return data;
+  },
+
+  create: async (user: {
+    username: string;
+    email: string;
+    password: string;
+    full_name: string;
+    role: string;
+  }): Promise<User> => {
+    const { data } = await api.post('/auth/users', user);
+    return data;
+  },
+
+  update: async (id: number, user: Partial<User & { is_active: boolean }>): Promise<User> => {
+    const { data } = await api.put(`/auth/users/${id}`, user);
+    return data;
+  },
+
+  delete: async (id: number): Promise<void> => {
+    await api.delete(`/auth/users/${id}`);
+  },
 };
 
 // ============== Faculty API ==============
@@ -259,6 +295,26 @@ export const statsApi = {
   getMonthly: async (year?: number): Promise<MonthlyStats[]> => {
     const { data } = await api.get('/stats/monthly', { params: { year } });
     return data;
+  },
+};
+
+// ============== Export API ==============
+
+export const exportApi = {
+  exportPayersExcel: async (filters: PayerFilters = {}): Promise<void> => {
+    const response = await api.get('/payers/export', {
+      params: filters,
+      responseType: 'blob',
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    const today = new Date().toLocaleDateString('ru-RU').replace(/\./g, '-');
+    link.setAttribute('download', `profpay_${today}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   },
 };
 

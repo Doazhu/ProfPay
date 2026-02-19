@@ -1,0 +1,32 @@
+# Enforce LF line endings for all files to prevent CRLF issues on Windows/WSL
+* text=auto eol=lf
+
+# Force LF for shell scripts (critical for Docker on WSL)
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Force LF for Dockerfiles and config files
+Dockerfile text eol=lf
+docker-compose*.yml text eol=lf
+nginx/*.conf text eol=lf
+*.conf text eol=lf
+
+# Python files
+*.py text eol=lf
+
+# Web files
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+
+# Binary files — no line ending conversion
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg text eol=lf

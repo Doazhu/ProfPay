@@ -44,6 +44,8 @@ def _encrypt_payer(payer: Payer, key: bytes) -> None:
     payer.stipend_amount = encrypt_decimal(payer.stipend_amount, key) if payer.stipend_amount is not None else None
     payer.budget_percent = encrypt_decimal(payer.budget_percent, key) if payer.budget_percent is not None else None
     payer.notes = encrypt_field(payer.notes, key)
+    payer.group_name = encrypt_field(payer.group_name, key)
+    payer.department = encrypt_field(payer.department, key)
 
 
 def _decrypt_payer(payer: Payer, key: bytes) -> None:
@@ -59,6 +61,8 @@ def _decrypt_payer(payer: Payer, key: bytes) -> None:
     payer.stipend_amount = decrypt_decimal(payer.stipend_amount, key)
     payer.budget_percent = decrypt_decimal(payer.budget_percent, key)
     payer.notes = decrypt_field(payer.notes, key)
+    payer.group_name = decrypt_field(payer.group_name, key)
+    payer.department = decrypt_field(payer.department, key)
 
 
 def _encrypt_payment(payment: Payment, key: bytes) -> None:

@@ -1,0 +1,20 @@
+# =============================================================================
+# Docker Compose HTTPS overlay — подключается поверх docker-compose.local.yml
+# Используется через setup-https.sh, который вызывает:
+#   docker compose -f docker-compose.local.yml -f docker-compose.https.yml up -d
+# =============================================================================
+
+services:
+  nginx:
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.https.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+
+  # Включаем Secure cookies для backend при HTTPS
+  backend:
+    environment:
+      COOKIE_SECURE: "true"
+      CORS_ORIGINS: '["https://localhost","https://localhost:443"]'

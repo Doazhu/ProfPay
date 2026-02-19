@@ -306,3 +306,6 @@ output.css
 Deploy.md
 docker-compose.local.yml
 .claude
+
+# mkcert SSL certificates — не коммитить приватные ключи!
+nginx/ssl/

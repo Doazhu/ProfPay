@@ -162,9 +162,11 @@ class Payer(Base):
     budget_percent = Column(Text, nullable=True)  # encrypted Decimal
 
     # University info - all optional now
-    faculty_id = Column(Integer, ForeignKey("faculties.id"), nullable=True)  # Optional
-    group_id = Column(Integer, ForeignKey("student_groups.id"), nullable=True)
-    course = Column(Integer, nullable=True)  # Course year (1-6)
+    faculty_id = Column(Integer, ForeignKey("faculties.id"), nullable=True)  # Optional (деректорат)
+    group_id = Column(Integer, ForeignKey("student_groups.id"), nullable=True)  # Legacy FK
+    group_name = Column(Text, nullable=True)  # Free-form encrypted group code e.g. "1-мд-35"
+    course = Column(Integer, nullable=True)  # Course year (1-6), auto-extracted from group_name
+    department = Column(Text, nullable=True)  # Encrypted кафедра abbreviation e.g. "ЦИАТ", optional
 
     # Payment status
     status = Column(Enum(PaymentStatus), default=PaymentStatus.UNPAID, nullable=False, index=True)

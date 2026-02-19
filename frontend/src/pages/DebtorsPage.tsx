@@ -1,25 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import type { Payer, Faculty, StudentGroup, PaymentStatus } from '../types';
-import { payerApi, facultyApi, groupApi } from '../services/api';
+import type { Payer, Faculty, PaymentStatus } from '../types';
+import { payerApi, facultyApi } from '../services/api';
 
-// Status Badge Component
+// Status Badge — только не оплачено
 function StatusBadge({ status }: { status: PaymentStatus }) {
-  const config = {
-    paid: { label: 'Оплачено', className: 'badge-success' },
-    partial: { label: 'Частично', className: 'badge-warning' },
-    unpaid: { label: 'Не оплачено', className: 'badge-danger' },
-    exempt: { label: 'Освобождён', className: 'badge-info' },
-  };
-
-  const { label, className } = config[status];
-  return <span className={className}>{label}</span>;
+  if (status === 'paid') return <span className="badge-success">Оплачено</span>;
+  return <span className="badge-danger">Не оплачено</span>;
 }
 
 export default function DebtorsPage() {
   const [debtors, setDebtors] = useState<Payer[]>([]);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
-  const [groups, setGroups] = useState<StudentGroup[]>([]);
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
@@ -30,34 +22,17 @@ export default function DebtorsPage() {
   const facultyId = searchParams.get('faculty') ? parseInt(searchParams.get('faculty')!) : undefined;
 
   useEffect(() => {
-    loadFilters();
+    facultyApi.getAll().then(setFaculties).catch(console.error);
   }, []);
 
   useEffect(() => {
     loadDebtors();
   }, [page, facultyId]);
 
-  const loadFilters = async () => {
-    try {
-      const [facultyData, groupData] = await Promise.all([
-        facultyApi.getAll(),
-        groupApi.getAll(),
-      ]);
-      setFaculties(facultyData);
-      setGroups(groupData);
-    } catch (error) {
-      console.error('Failed to load filters:', error);
-    }
-  };
-
   const loadDebtors = async () => {
     setIsLoading(true);
     try {
-      const response = await payerApi.getDebtors({
-        page,
-        per_page: 20,
-        faculty_id: facultyId,
-      });
+      const response = await payerApi.getDebtors({ page, per_page: 20, faculty_id: facultyId });
       setDebtors(response.items);
       setTotal(response.total);
       setPages(response.pages);
@@ -70,40 +45,19 @@ export default function DebtorsPage() {
 
   const updateFilter = (key: string, value: string | undefined) => {
     const newParams = new URLSearchParams(searchParams);
-    if (value) {
-      newParams.set(key, value);
-    } else {
-      newParams.delete(key);
-    }
-    if (key !== 'page') {
-      newParams.delete('page');
-    }
+    if (value) newParams.set(key, value); else newParams.delete(key);
+    if (key !== 'page') newParams.delete('page');
     setSearchParams(newParams);
   };
 
-  const formatMoney = (amount: number) => {
-    return new Intl.NumberFormat('ru-RU', {
-      style: 'currency',
-      currency: 'RUB',
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
+  const formatMoney = (amount: number) =>
+    new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 }).format(amount);
 
-  // Get faculty/group names for display
   const getFacultyName = (id: number | null) => {
     if (!id) return '—';
-    const faculty = faculties.find(f => f.id === id);
-    return faculty?.short_name || faculty?.name || '—';
+    const f = faculties.find(f => f.id === id);
+    return f?.short_name || f?.name || '—';
   };
-
-  const getGroupName = (id: number | null) => {
-    if (!id) return '';
-    const group = groups.find(g => g.id === id);
-    return group?.name || '';
-  };
-
-  const unpaidCount = debtors.filter(d => d.status === 'unpaid').length;
-  const partialCount = debtors.filter(d => d.status === 'partial').length;
 
   return (
     <div className="animate-fade-in">
@@ -115,62 +69,23 @@ export default function DebtorsPage() {
           </svg>
           <span>Должники</span>
         </h1>
-        <p className="text-accent mt-1">
-          Плательщики с неоплаченными или частично оплаченными взносами: {total}
-        </p>
+        <p className="text-accent mt-1">Плательщики с неоплаченными взносами: {total}</p>
       </div>
 
       {/* Filter */}
       <div className="card mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-          <label className="text-sm text-accent whitespace-nowrap">Фильтр по факультету:</label>
+          <label className="text-sm text-accent whitespace-nowrap">Фильтр по деректорату:</label>
           <select
             value={facultyId || ''}
             onChange={(e) => updateFilter('faculty', e.target.value)}
             className="input sm:max-w-xs"
           >
-            <option value="">Все факультеты</option>
+            <option value="">Все деректораты</option>
             {faculties.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.short_name || f.name}
-              </option>
+              <option key={f.id} value={f.id}>{f.short_name || f.name}</option>
             ))}
           </select>
-        </div>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 gap-3 md:gap-4 mb-6">
-        <div className="card bg-red-50 border-red-200">
-          <div className="flex items-center gap-3 md:gap-4">
-            <div className="p-2 md:p-3 rounded-lg bg-red-100 flex-shrink-0">
-              <svg className="w-5 h-5 md:w-6 md:h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs md:text-sm text-red-600">Не оплачено</p>
-              <p className="text-xl md:text-2xl font-bold text-red-700">
-                {unpaidCount}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card bg-yellow-50 border-yellow-200">
-          <div className="flex items-center gap-3 md:gap-4">
-            <div className="p-2 md:p-3 rounded-lg bg-yellow-100 flex-shrink-0">
-              <svg className="w-5 h-5 md:w-6 md:h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs md:text-sm text-yellow-600">Частично</p>
-              <p className="text-xl md:text-2xl font-bold text-yellow-700">
-                {partialCount}
-              </p>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -197,7 +112,7 @@ export default function DebtorsPage() {
                   <tr className="bg-red-50">
                     <th className="text-left py-3 px-4 text-sm font-medium text-red-800">ФИО</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-red-800">Контакты</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-red-800">Факультет/Группа</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-red-800">Деректорат / Группа</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-red-800">Статус</th>
                     <th className="text-right py-3 px-4 text-sm font-medium text-red-800">Оплачено</th>
                     <th className="text-right py-3 px-4 text-sm font-medium text-red-800">Действия</th>
@@ -207,15 +122,10 @@ export default function DebtorsPage() {
                   {debtors.map((debtor) => (
                     <tr key={debtor.id} className="border-b border-light-dark last:border-0 transition-colors duration-150 hover:bg-red-50/50">
                       <td className="py-3 px-4">
-                        <Link
-                          to={`/payers/${debtor.id}`}
-                          className="text-dark hover:text-primary font-medium transition-colors duration-150"
-                        >
+                        <Link to={`/payers/${debtor.id}`} className="text-dark hover:text-primary font-medium transition-colors duration-150">
                           {debtor.full_name}
                         </Link>
-                        {debtor.course && (
-                          <p className="text-xs text-accent">{debtor.course} курс</p>
-                        )}
+                        {debtor.course && <p className="text-xs text-accent">{debtor.course} курс</p>}
                       </td>
                       <td className="py-3 px-4 text-sm">
                         {debtor.phone && <p className="text-accent">{debtor.phone}</p>}
@@ -225,7 +135,7 @@ export default function DebtorsPage() {
                       </td>
                       <td className="py-3 px-4 text-accent">
                         {getFacultyName(debtor.faculty_id)}
-                        {debtor.group_id && ` / ${getGroupName(debtor.group_id)}`}
+                        {debtor.group_name && ` / ${debtor.group_name}`}
                       </td>
                       <td className="py-3 px-4">
                         <StatusBadge status={debtor.status} />
@@ -234,10 +144,7 @@ export default function DebtorsPage() {
                         {formatMoney(debtor.total_paid)}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <Link
-                          to={`/payers/${debtor.id}`}
-                          className="btn-primary btn-sm"
-                        >
+                        <Link to={`/payers/${debtor.id}`} className="btn-primary btn-sm">
                           Внести платёж
                         </Link>
                       </td>
@@ -250,28 +157,21 @@ export default function DebtorsPage() {
             {/* Mobile cards */}
             <div className="md:hidden space-y-3">
               {debtors.map((debtor) => (
-                <div
-                  key={debtor.id}
-                  className="p-4 bg-red-50/50 rounded-lg border border-red-100"
-                >
+                <div key={debtor.id} className="p-4 bg-red-50/50 rounded-lg border border-red-100">
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="min-w-0 flex-1">
-                      <Link
-                        to={`/payers/${debtor.id}`}
-                        className="font-medium text-dark hover:text-primary transition-colors"
-                      >
+                      <Link to={`/payers/${debtor.id}`} className="font-medium text-dark hover:text-primary transition-colors">
                         {debtor.full_name}
                       </Link>
                       <p className="text-xs text-accent mt-0.5">
                         {getFacultyName(debtor.faculty_id)}
-                        {debtor.group_id && ` / ${getGroupName(debtor.group_id)}`}
+                        {debtor.group_name && ` / ${debtor.group_name}`}
                         {debtor.course && ` • ${debtor.course} курс`}
                       </p>
                     </div>
                     <StatusBadge status={debtor.status} />
                   </div>
 
-                  {/* Contacts */}
                   {(debtor.phone || debtor.email || debtor.telegram) && (
                     <div className="text-sm text-accent mb-3 space-y-0.5">
                       {debtor.phone && <p>{debtor.phone}</p>}
@@ -282,10 +182,7 @@ export default function DebtorsPage() {
 
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-dark">{formatMoney(debtor.total_paid)}</span>
-                    <Link
-                      to={`/payers/${debtor.id}`}
-                      className="btn-primary btn-sm"
-                    >
+                    <Link to={`/payers/${debtor.id}`} className="btn-primary btn-sm">
                       Внести платёж
                     </Link>
                   </div>
@@ -298,9 +195,7 @@ export default function DebtorsPage() {
         {/* Pagination */}
         {pages > 1 && (
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-light-dark">
-            <p className="text-sm text-accent order-2 sm:order-1">
-              Страница {page} из {pages}
-            </p>
+            <p className="text-sm text-accent order-2 sm:order-1">Страница {page} из {pages}</p>
             <div className="flex gap-2 order-1 sm:order-2 w-full sm:w-auto">
               <button
                 onClick={() => updateFilter('page', String(page - 1))}
