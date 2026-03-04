@@ -1,28 +1,31 @@
 #!/bin/bash
 # =============================================================================
-# ProfPay — Первичное получение SSL-сертификата Let's Encrypt
-# Запускать ОДИН раз при первом деплое на сервере
+# ProfPay — Настройка SSL и запуск на VDS
+# SSL через HOST nginx + certbot (не через Docker)
 # =============================================================================
 
 set -e
 
 DOMAIN="profpay.site"
 EMAIL="${1:-}"
-COMPOSE_FILE="docker-compose.prod.yml"
 
 if [ -z "$EMAIL" ]; then
   echo "Использование: ./init-ssl.sh your-email@example.com"
-  echo "Email нужен для уведомлений от Let's Encrypt"
   exit 1
 fi
 
-echo "=== Получение SSL-сертификата для $DOMAIN ==="
+echo "=== Настройка ProfPay для $DOMAIN ==="
 
-# 1. Создаём директории
-mkdir -p certbot/conf certbot/www
+# 1. Проверяем что certbot установлен
+if ! command -v certbot &> /dev/null; then
+  echo "=== Устанавливаю certbot ==="
+  apt-get update && apt-get install -y certbot python3-certbot-nginx
+fi
 
-# 2. Создаём временный nginx конфиг (только HTTP для ACME challenge)
-cat > nginx/nginx-initssl.conf << 'INITEOF'
+# 2. Копируем nginx конфиг на хост (только HTTP часть для начала)
+echo "=== Настраиваю nginx ==="
+cat > /etc/nginx/sites-available/profpay.site << 'EOF'
+# Временный конфиг — только HTTP для получения сертификата
 server {
     listen 80;
     listen [::]:80;
@@ -37,44 +40,38 @@ server {
         add_header Content-Type text/plain;
     }
 }
-INITEOF
+EOF
 
-# 3. Запускаем nginx с временным конфигом
-echo "=== Запускаю nginx для ACME challenge ==="
-docker compose -f "$COMPOSE_FILE" up -d db
-sleep 3
+# Создаём симлинк если его нет
+ln -sf /etc/nginx/sites-available/profpay.site /etc/nginx/sites-enabled/profpay.site
+mkdir -p /var/www/certbot
 
-docker run -d --name profpay-nginx-initssl \
-  -p 80:80 \
-  -v "$(pwd)/nginx/nginx-initssl.conf:/etc/nginx/conf.d/default.conf:ro" \
-  -v "$(pwd)/certbot/www:/var/www/certbot:ro" \
-  nginx:1.25-alpine
+# Проверяем и перезагружаем nginx
+nginx -t && systemctl reload nginx
 
-sleep 2
+# 3. Получаем SSL сертификат
+echo "=== Получаю SSL сертификат ==="
+certbot certonly --webroot \
+  --webroot-path=/var/www/certbot \
+  --email "$EMAIL" \
+  --agree-tos \
+  --no-eff-email \
+  -d "$DOMAIN"
 
-# 4. Получаем сертификат
-echo "=== Запрашиваю сертификат у Let's Encrypt ==="
-docker run --rm \
-  -v "$(pwd)/certbot/conf:/etc/letsencrypt" \
-  -v "$(pwd)/certbot/www:/var/www/certbot" \
-  certbot/certbot certonly \
-    --webroot \
-    --webroot-path=/var/www/certbot \
-    --email "$EMAIL" \
-    --agree-tos \
-    --no-eff-email \
-    -d "$DOMAIN"
+# 4. Теперь ставим полный конфиг с SSL
+echo "=== Применяю полный nginx конфиг ==="
+cp nginx/profpay.site.conf /etc/nginx/sites-available/profpay.site
+nginx -t && systemctl reload nginx
 
-# 5. Убираем временный nginx
-echo "=== Убираю временный nginx ==="
-docker stop profpay-nginx-initssl && docker rm profpay-nginx-initssl
-rm nginx/nginx-initssl.conf
-
-# 6. Запускаем проект полностью
-echo "=== Запускаю ProfPay ==="
-docker compose -f "$COMPOSE_FILE" up -d --build
+# 5. Запускаем Docker
+echo "=== Собираю и запускаю ProfPay ==="
+docker compose -f docker-compose.prod.yml up -d --build
 
 echo ""
 echo "=== Готово! ==="
-echo "Сайт доступен: https://$DOMAIN"
+echo "Сайт: https://$DOMAIN"
+echo ""
+echo "Проверь:"
+echo "  docker compose -f docker-compose.prod.yml ps"
+echo "  curl -I https://$DOMAIN"
 echo ""
