@@ -309,6 +309,8 @@ class PayerRepository:
         self.db.add(payer)
         self.db.commit()
         self.db.refresh(payer)
+        # Eagerly load payments before detaching from session
+        _ = list(payer.payments)
         _safe_expunge(self.db, payer)
         _decrypt_payer(payer, self.key)
         return payer
@@ -320,8 +322,14 @@ class PayerRepository:
         _encrypt_payer(payer, self.key)
         self.db.commit()
         self.db.refresh(payer)
+        # Eagerly load payments before detaching from session
+        payments = list(payer.payments)
+        for p in payments:
+            _safe_expunge(self.db, p)
         _safe_expunge(self.db, payer)
         _decrypt_payer(payer, self.key)
+        for p in payments:
+            _decrypt_payment(p, self.key)
         return payer
 
     def delete(self, payer_id: int) -> bool:

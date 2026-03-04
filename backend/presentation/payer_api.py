@@ -606,9 +606,8 @@ async def create_payer(
 
     created_payer = payer_repo.create(payer)
 
-    # Return with computed total_paid
     return {
-        **created_payer.__dict__,
+        **{k: v for k, v in created_payer.__dict__.items() if k != "_sa_instance_state"},
         "full_name": created_payer.full_name,
         "total_paid": created_payer.total_paid
     }
@@ -640,7 +639,7 @@ async def update_payer(
     updated_payer = payer_repo.update(payer)
 
     return {
-        **updated_payer.__dict__,
+        **{k: v for k, v in updated_payer.__dict__.items() if k != "_sa_instance_state"},
         "full_name": updated_payer.full_name,
         "total_paid": updated_payer.total_paid
     }
