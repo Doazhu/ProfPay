@@ -3,14 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import type { Faculty, PayerCreate, BudgetSettings } from '../types';
 import { payerApi, facultyApi, budgetSettingsApi } from '../services/api';
 
-/** Возвращает текущий учебный год в формате "2025-2026" */
-function getCurrentAcademicYear(): string {
-  const now = new Date();
-  const month = now.getMonth() + 1; // 1-12
-  const year = now.getFullYear();
-  return month >= 9 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
-}
-
 /** Пытается извлечь курс из кода группы вида "1-мд-35" */
 function parseCourseFromGroup(groupCode: string): number | undefined {
   const match = groupCode.trim().match(/^(\d)/);
