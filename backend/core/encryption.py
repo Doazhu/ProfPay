@@ -88,7 +88,11 @@ def decrypt_field(token: Optional[str], key: bytes) -> Optional[str]:
         f = Fernet(key)
         return f.decrypt(token.encode("ascii")).decode("utf-8")
     except (InvalidToken, Exception):
-        # If decryption fails, return the raw value (possibly unencrypted data)
+        # If decryption fails, return the raw value (possibly unencrypted legacy data)
+        import logging
+        logging.getLogger(__name__).warning(
+            "Failed to decrypt field — returning raw value (possibly unencrypted legacy data)"
+        )
         return token
 
 

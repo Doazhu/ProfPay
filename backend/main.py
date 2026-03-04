@@ -28,16 +28,18 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             return response
 
         # Content Security Policy
-        response.headers["Content-Security-Policy"] = (
+        csp = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline'; "
             "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data:; "
             "font-src 'self'; "
             "frame-ancestors 'none'; "
-            "form-action 'self'; "
-            "upgrade-insecure-requests;"
+            "form-action 'self';"
         )
+        if settings.COOKIE_SECURE:
+            csp += " upgrade-insecure-requests;"
+        response.headers["Content-Security-Policy"] = csp
 
         # Prevent clickjacking
         response.headers["X-Frame-Options"] = "DENY"
@@ -56,8 +58,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "camera=(), microphone=(), geolocation=(), payment=()"
         )
 
-        # HSTS - force HTTPS (uncomment in production)
-        # response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        # HSTS - force HTTPS in production
+        if settings.COOKIE_SECURE:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
 
         return response
 
@@ -93,6 +96,17 @@ app.include_router(stats_router, prefix="/api/v1")
 @app.on_event("startup")
 async def startup_event():
     """Initialize database on startup."""
+    # Warn about insecure defaults in production
+    if not settings.DEBUG:
+        if settings.SECRET_KEY == "your-super-secret-key-change-in-production":
+            import sys
+            print("CRITICAL: SECRET_KEY is set to the default value! "
+                  "Set a secure SECRET_KEY in .env before running in production.",
+                  file=sys.stderr)
+            sys.exit(1)
+        if settings.ADMIN_PASSWORD == "admin123":
+            print("WARNING: ADMIN_PASSWORD is set to default 'admin123'. "
+                  "Change it in .env for production!")
     init_db()
 
 
