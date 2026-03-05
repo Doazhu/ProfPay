@@ -607,9 +607,32 @@ async def create_payer(
     created_payer = payer_repo.create(payer)
 
     return {
-        **{k: v for k, v in created_payer.__dict__.items() if k != "_sa_instance_state"},
+        "id": created_payer.id,
+        "last_name": created_payer.last_name,
+        "first_name": created_payer.first_name,
+        "middle_name": created_payer.middle_name,
+        "date_of_birth": created_payer.date_of_birth,
         "full_name": created_payer.full_name,
-        "total_paid": created_payer.total_paid
+        "email": created_payer.email,
+        "phone": created_payer.phone,
+        "telegram": created_payer.telegram,
+        "vk": created_payer.vk,
+        "is_budget": created_payer.is_budget,
+        "stipend_amount": created_payer.stipend_amount,
+        "budget_percent": created_payer.budget_percent,
+        "faculty_id": created_payer.faculty_id,
+        "group_id": created_payer.group_id,
+        "group_name": created_payer.group_name,
+        "course": created_payer.course,
+        "department": created_payer.department,
+        "status": created_payer.status,
+        "membership_start": created_payer.membership_start,
+        "membership_end": created_payer.membership_end,
+        "is_active": created_payer.is_active,
+        "notes": created_payer.notes,
+        "created_at": created_payer.created_at,
+        "updated_at": created_payer.updated_at,
+        "total_paid": created_payer.total_paid,
     }
 
 
@@ -631,17 +654,54 @@ async def update_payer(
             detail="Payer not found"
         )
 
-    # Update only provided fields
+    # Update only provided fields on a fresh DB object to avoid merge corruption
+    # (get_by_id returns expunged+decrypted payer with decrypted payments;
+    #  merging it back would overwrite encrypted payment amounts with plaintext)
     update_data = payer_data.model_dump(exclude_unset=True)
+    fresh_payer = db.query(Payer).filter(Payer.id == payer_id).first()
     for field, value in update_data.items():
-        setattr(payer, field, value)
+        setattr(fresh_payer, field, value)
 
-    updated_payer = payer_repo.update(payer)
+    from backend.infrastructure.repositories import _encrypt_payer, _decrypt_payer, _safe_expunge, _encrypt_payment, _decrypt_payment
+    _encrypt_payer(fresh_payer, encryption_key)
+    db.commit()
+    db.refresh(fresh_payer)
+    # Load payments for total_paid calculation
+    payments = list(fresh_payer.payments)
+    for p in payments:
+        _safe_expunge(db, p)
+    _safe_expunge(db, fresh_payer)
+    _decrypt_payer(fresh_payer, encryption_key)
+    for p in payments:
+        _decrypt_payment(p, encryption_key)
 
     return {
-        **{k: v for k, v in updated_payer.__dict__.items() if k != "_sa_instance_state"},
-        "full_name": updated_payer.full_name,
-        "total_paid": updated_payer.total_paid
+        "id": fresh_payer.id,
+        "last_name": fresh_payer.last_name,
+        "first_name": fresh_payer.first_name,
+        "middle_name": fresh_payer.middle_name,
+        "date_of_birth": fresh_payer.date_of_birth,
+        "full_name": fresh_payer.full_name,
+        "email": fresh_payer.email,
+        "phone": fresh_payer.phone,
+        "telegram": fresh_payer.telegram,
+        "vk": fresh_payer.vk,
+        "is_budget": fresh_payer.is_budget,
+        "stipend_amount": fresh_payer.stipend_amount,
+        "budget_percent": fresh_payer.budget_percent,
+        "faculty_id": fresh_payer.faculty_id,
+        "group_id": fresh_payer.group_id,
+        "group_name": fresh_payer.group_name,
+        "course": fresh_payer.course,
+        "department": fresh_payer.department,
+        "status": fresh_payer.status,
+        "membership_start": fresh_payer.membership_start,
+        "membership_end": fresh_payer.membership_end,
+        "is_active": fresh_payer.is_active,
+        "notes": fresh_payer.notes,
+        "created_at": fresh_payer.created_at,
+        "updated_at": fresh_payer.updated_at,
+        "total_paid": fresh_payer.total_paid,
     }
 
 

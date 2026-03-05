@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import type { Payer, Payment, Faculty } from '../types';
-import { payerApi, paymentApi, facultyApi, budgetSettingsApi } from '../services/api';
+import type { Payer, Payment, Faculty, PaymentSettings } from '../types';
+import { payerApi, paymentApi, facultyApi, budgetSettingsApi, paymentSettingsApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
 /** Возвращает текущий учебный год в формате "2025-2026" */
@@ -79,6 +79,9 @@ export default function PayerDetailPage() {
     status: 'unpaid' as 'paid' | 'unpaid',
   });
 
+  // Payment settings (loaded from backend)
+  const [allPaymentSettings, setAllPaymentSettings] = useState<PaymentSettings[]>([]);
+
   // Payment form — учебный год по умолчанию = текущий
   const [newPayment, setNewPayment] = useState({
     amount: '',
@@ -105,12 +108,14 @@ export default function PayerDetailPage() {
     if (!id) return;
     setIsLoading(true);
     try {
-      const [payerData, paymentsData, facultyData, budgetData] = await Promise.all([
+      const [payerData, paymentsData, facultyData, budgetData, paySettingsData] = await Promise.all([
         payerApi.getById(Number(id)),
         paymentApi.getByPayer(Number(id)),
         facultyApi.getAll(false),
         budgetSettingsApi.get().catch(() => ({ default_budget_percent: '1', default_stipend_amount: '' })),
+        paymentSettingsApi.getAll().catch(() => [] as PaymentSettings[]),
       ]);
+      setAllPaymentSettings(paySettingsData);
       setPayer(payerData);
       setPayments(paymentsData);
       setFaculties(facultyData);
@@ -227,6 +232,23 @@ export default function PayerDetailPage() {
     if (!fid) return 'Не указан';
     const f = faculties.find(f => f.id === fid);
     return f ? (f.short_name ? `${f.short_name} — ${f.name}` : f.name) : 'Не указан';
+  };
+
+  // Find payment settings for the selected academic year
+  const activeSettings = useMemo(() => {
+    return allPaymentSettings.find(
+      (s) => s.academic_year === newPayment.academic_year && s.is_active
+    ) || null;
+  }, [allPaymentSettings, newPayment.academic_year]);
+
+  // Auto-fill amount when semester is selected and settings exist
+  const handleSemesterChange = (semester: 'fall' | 'spring' | '') => {
+    const update: typeof newPayment = { ...newPayment, semester };
+    if (semester && activeSettings && !newPayment.amount) {
+      const amt = semester === 'fall' ? activeSettings.fall_amount : activeSettings.spring_amount;
+      update.amount = String(amt);
+    }
+    setNewPayment(update);
   };
 
   // Academic year options (centered on current)
@@ -591,7 +613,86 @@ export default function PayerDetailPage() {
         {showPaymentForm && (
           <div className="mb-6 p-4 bg-light-dark/30 rounded-lg animate-slide-in">
             <h3 className="font-medium text-dark mb-3">Новый платёж</h3>
+
+            {/* Quick-fill buttons from PaymentSettings */}
+            {activeSettings && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-xs text-blue-700 mb-2">
+                  Шаблон оплаты ({activeSettings.academic_year}):
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNewPayment({
+                      ...newPayment,
+                      semester: 'fall',
+                      amount: String(activeSettings.fall_amount),
+                    })}
+                    className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                      newPayment.semester === 'fall' && newPayment.amount === String(activeSettings.fall_amount)
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-100'
+                    }`}
+                  >
+                    Осенний — {new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 }).format(activeSettings.fall_amount)}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewPayment({
+                      ...newPayment,
+                      semester: 'spring',
+                      amount: String(activeSettings.spring_amount),
+                    })}
+                    className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                      newPayment.semester === 'spring' && newPayment.amount === String(activeSettings.spring_amount)
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-100'
+                    }`}
+                  >
+                    Весенний — {new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 }).format(activeSettings.spring_amount)}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewPayment({
+                      ...newPayment,
+                      semester: '',
+                      amount: String(activeSettings.total_year_amount),
+                      notes: 'Оплата за год',
+                    })}
+                    className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                      newPayment.amount === String(activeSettings.total_year_amount)
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-100'
+                    }`}
+                  >
+                    Год — {new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 }).format(activeSettings.total_year_amount)}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm text-accent mb-1">Учебный год</label>
+                <select value={newPayment.academic_year}
+                  onChange={(e) => setNewPayment({ ...newPayment, academic_year: e.target.value, amount: '', semester: '' })}
+                  className="input">
+                  <option value="">Не указан</option>
+                  {yearOptions.map((year) => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-accent mb-1">Семестр</label>
+                <select value={newPayment.semester}
+                  onChange={(e) => handleSemesterChange(e.target.value as 'fall' | 'spring' | '')}
+                  className="input">
+                  <option value="">Не указан</option>
+                  <option value="fall">Осенний</option>
+                  <option value="spring">Весенний</option>
+                </select>
+              </div>
               <div>
                 <label className="block text-sm text-accent mb-1">Сумма *</label>
                 <input type="number" value={newPayment.amount}
@@ -613,27 +714,6 @@ export default function PayerDetailPage() {
                   <option value="cash">Наличные</option>
                   <option value="card">Карта</option>
                   <option value="transfer">Перевод</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm text-accent mb-1">Учебный год</label>
-                <select value={newPayment.academic_year}
-                  onChange={(e) => setNewPayment({ ...newPayment, academic_year: e.target.value })}
-                  className="input">
-                  <option value="">Не указан</option>
-                  {yearOptions.map((year) => (
-                    <option key={year} value={year}>{year}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm text-accent mb-1">Семестр</label>
-                <select value={newPayment.semester}
-                  onChange={(e) => setNewPayment({ ...newPayment, semester: e.target.value as 'fall' | 'spring' | '' })}
-                  className="input">
-                  <option value="">Не указан</option>
-                  <option value="fall">Осенний</option>
-                  <option value="spring">Весенний</option>
                 </select>
               </div>
               <div>

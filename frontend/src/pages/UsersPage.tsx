@@ -86,17 +86,29 @@ export default function UsersPage() {
 
   const handleSaveUser = async () => {
     if (!editingUserId) return;
+    if (!editFullName.trim() || !editEmail.trim()) {
+      setError('ФИО и Email обязательны');
+      return;
+    }
+    setError('');
     try {
       await userApi.update(editingUserId, {
-        email: editEmail,
-        full_name: editFullName,
+        email: editEmail.trim(),
+        full_name: editFullName.trim(),
         role: editRole,
       });
       setEditingUserId(null);
       await loadUsers();
     } catch (err: any) {
       console.error('Failed to update user:', err);
-      setError(err.response?.data?.detail || 'Ошибка при обновлении пользователя');
+      const detail = err.response?.data?.detail;
+      if (typeof detail === 'string') {
+        setError(detail);
+      } else if (Array.isArray(detail)) {
+        setError(detail.map((d: any) => d.msg || d).join('; '));
+      } else {
+        setError('Ошибка при обновлении пользователя');
+      }
     }
   };
 

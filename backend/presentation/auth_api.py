@@ -333,6 +333,13 @@ async def update_user(
         )
 
     if user_data.email is not None:
+        # Check email uniqueness
+        existing = user_repo.get_by_email(user_data.email)
+        if existing and existing.id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Пользователь с таким email уже существует",
+            )
         user.email = user_data.email
     if user_data.full_name is not None:
         user.full_name = user_data.full_name
@@ -341,7 +348,14 @@ async def update_user(
     if user_data.is_active is not None:
         user.is_active = user_data.is_active
 
-    return user_repo.update(user)
+    try:
+        return user_repo.update(user)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Ошибка при обновлении: {str(e)}",
+        )
 
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
