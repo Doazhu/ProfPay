@@ -1,7 +1,15 @@
 import { useState, useEffect, useMemo, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Faculty, PayerCreate, BudgetSettings } from '../types';
-import { payerApi, facultyApi, budgetSettingsApi } from '../services/api';
+import type { Faculty, PayerCreate, BudgetSettings, PaymentSettings } from '../types';
+import { payerApi, paymentApi, facultyApi, budgetSettingsApi, paymentSettingsApi } from '../services/api';
+
+/** Возвращает текущий учебный год в формате "2025-2026" */
+function getCurrentAcademicYear(): string {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+  return month >= 9 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+}
 
 /** Пытается извлечь курс из кода группы вида "1-мд-35" */
 function parseCourseFromGroup(groupCode: string): number | undefined {
@@ -40,6 +48,39 @@ export default function AddPayerPage() {
     return 0;
   }, [stipendAmount, budgetPercent]);
 
+  // Payment settings
+  const [allPaymentSettings, setAllPaymentSettings] = useState<PaymentSettings[]>([]);
+
+  // Payment with creation
+  const [addPayment, setAddPayment] = useState(false);
+  const [paymentData, setPaymentData] = useState({
+    amount: '',
+    payment_date: new Date().toISOString().split('T')[0],
+    academic_year: getCurrentAcademicYear(),
+    semester: '' as 'fall' | 'spring' | '',
+    payment_method: '',
+    notes: '',
+  });
+
+  // Academic year options
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
+  const baseYear = currentMonth >= 9 ? currentYear : currentYear - 1;
+  const yearOptions = Array.from({ length: 5 }, (_, i) => {
+    const y = baseYear - 2 + i;
+    return `${y}-${y + 1}`;
+  });
+
+  // Find payment settings for selected year
+  const activeSettings = useMemo(() => {
+    return allPaymentSettings.find(
+      (s) => s.academic_year === paymentData.academic_year && s.is_active
+    ) || null;
+  }, [allPaymentSettings, paymentData.academic_year]);
+
+  const formatMoney = (amount: number) =>
+    new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 }).format(amount);
+
   // Form state
   const [formData, setFormData] = useState<PayerCreate>({
     last_name: '',
@@ -61,6 +102,7 @@ export default function AddPayerPage() {
   useEffect(() => {
     loadFaculties();
     loadBudgetDefaults();
+    loadPaymentSettings();
   }, []);
 
   // Auto-extract course when group_name changes
@@ -77,6 +119,15 @@ export default function AddPayerPage() {
       setFaculties(data);
     } catch (error) {
       console.error('Failed to load faculties:', error);
+    }
+  };
+
+  const loadPaymentSettings = async () => {
+    try {
+      const data = await paymentSettingsApi.getAll();
+      setAllPaymentSettings(data);
+    } catch (error) {
+      console.error('Failed to load payment settings:', error);
     }
   };
 
@@ -120,6 +171,24 @@ export default function AddPayerPage() {
         course: formData.course ? Number(formData.course) : undefined,
         department: formData.department || undefined,
       });
+
+      // Create payment if filled
+      if (addPayment && paymentData.amount) {
+        try {
+          await paymentApi.create({
+            payer_id: payer.id,
+            amount: Number(paymentData.amount),
+            payment_date: paymentData.payment_date,
+            academic_year: paymentData.academic_year || undefined,
+            semester: paymentData.semester || undefined,
+            payment_method: paymentData.payment_method || undefined,
+            notes: paymentData.notes || undefined,
+          });
+        } catch (payErr) {
+          console.error('Payment creation failed:', payErr);
+        }
+      }
+
       navigate(`/payers/${payer.id}`);
     } catch (err: unknown) {
       const error = err as { response?: { data?: { detail?: string } } };
@@ -413,6 +482,120 @@ export default function AddPayerPage() {
                   Заполнить шаблонными значениями (стипендия: {budgetDefaults.default_stipend_amount} / процент: {budgetDefaults.default_budget_percent}%)
                 </button>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* Payment */}
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold text-dark mb-4">Оплата</h2>
+          <label className="flex items-center gap-3 cursor-pointer mb-4">
+            <input
+              type="checkbox"
+              checked={addPayment}
+              onChange={(e) => setAddPayment(e.target.checked)}
+              className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+            />
+            <span className="text-dark font-medium">Внести оплату сразу</span>
+          </label>
+
+          {addPayment && (
+            <div className="p-4 bg-green-50 border border-green-200 rounded-lg animate-fade-in">
+              {/* Quick-fill from settings */}
+              {activeSettings && (
+                <div className="mb-4">
+                  <p className="text-xs text-green-700 mb-2">
+                    Шаблон ({activeSettings.academic_year}):
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => setPaymentData({
+                      ...paymentData, semester: 'fall', amount: String(activeSettings.fall_amount),
+                    })} className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                      paymentData.semester === 'fall' && paymentData.amount === String(activeSettings.fall_amount)
+                        ? 'bg-green-600 text-white border-green-600'
+                        : 'bg-white text-green-700 border-green-300 hover:bg-green-100'
+                    }`}>
+                      Осенний — {formatMoney(activeSettings.fall_amount)}
+                    </button>
+                    <button type="button" onClick={() => setPaymentData({
+                      ...paymentData, semester: 'spring', amount: String(activeSettings.spring_amount),
+                    })} className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                      paymentData.semester === 'spring' && paymentData.amount === String(activeSettings.spring_amount)
+                        ? 'bg-green-600 text-white border-green-600'
+                        : 'bg-white text-green-700 border-green-300 hover:bg-green-100'
+                    }`}>
+                      Весенний — {formatMoney(activeSettings.spring_amount)}
+                    </button>
+                    <button type="button" onClick={() => setPaymentData({
+                      ...paymentData, semester: '', amount: String(activeSettings.total_year_amount), notes: 'Оплата за год',
+                    })} className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                      paymentData.amount === String(activeSettings.total_year_amount)
+                        ? 'bg-green-600 text-white border-green-600'
+                        : 'bg-white text-green-700 border-green-300 hover:bg-green-100'
+                    }`}>
+                      Год — {formatMoney(activeSettings.total_year_amount)}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm text-accent mb-1">Учебный год</label>
+                  <select value={paymentData.academic_year}
+                    onChange={(e) => setPaymentData({ ...paymentData, academic_year: e.target.value })}
+                    className="input">
+                    <option value="">Не указан</option>
+                    {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm text-accent mb-1">Семестр</label>
+                  <select value={paymentData.semester}
+                    onChange={(e) => {
+                      const sem = e.target.value as 'fall' | 'spring' | '';
+                      const upd = { ...paymentData, semester: sem };
+                      if (sem && activeSettings && !paymentData.amount) {
+                        upd.amount = String(sem === 'fall' ? activeSettings.fall_amount : activeSettings.spring_amount);
+                      }
+                      setPaymentData(upd);
+                    }}
+                    className="input">
+                    <option value="">Не указан</option>
+                    <option value="fall">Осенний</option>
+                    <option value="spring">Весенний</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm text-accent mb-1">Сумма *</label>
+                  <input type="number" value={paymentData.amount}
+                    onChange={(e) => setPaymentData({ ...paymentData, amount: e.target.value })}
+                    placeholder="0" className="input" min="0" />
+                </div>
+                <div>
+                  <label className="block text-sm text-accent mb-1">Дата платежа</label>
+                  <input type="date" value={paymentData.payment_date}
+                    onChange={(e) => setPaymentData({ ...paymentData, payment_date: e.target.value })}
+                    className="input" />
+                </div>
+                <div>
+                  <label className="block text-sm text-accent mb-1">Способ оплаты</label>
+                  <select value={paymentData.payment_method}
+                    onChange={(e) => setPaymentData({ ...paymentData, payment_method: e.target.value })}
+                    className="input">
+                    <option value="">Не указан</option>
+                    <option value="cash">Наличные</option>
+                    <option value="card">Карта</option>
+                    <option value="transfer">Перевод</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm text-accent mb-1">Примечание</label>
+                  <input type="text" value={paymentData.notes}
+                    onChange={(e) => setPaymentData({ ...paymentData, notes: e.target.value })}
+                    className="input" placeholder="Примечание..." />
+                </div>
+              </div>
             </div>
           )}
         </div>
