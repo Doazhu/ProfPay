@@ -784,10 +784,13 @@ async def create_payment(
     created_payment = payment_repo.create(payment)
 
     # Update payer status based on payment
+    # Use direct DB update to avoid merging detached payer with decrypted payments
     total_paid = payment_repo.get_total_by_payer(payer.id)
     if total_paid > Decimal("0"):
-        payer.status = PaymentStatus.PAID  # Simplified logic
-        payer_repo.update(payer)
+        db.query(Payer).filter(Payer.id == payer.id).update(
+            {"status": PaymentStatus.PAID}
+        )
+        db.commit()
 
     return created_payment
 
