@@ -559,7 +559,7 @@ export default function SettingsPage() {
       <div className="mt-6 p-3 md:p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
         <p className="text-sm text-yellow-800">
           <strong>Примечание:</strong> Деактивация деректората скрывает его из выпадающих списков, но не удаляет связанные данные плательщиков.
-          Полное удаление возможно только если нет привязанных плательщиков.
+          Полное удаление возможно только если нет привязанных плательщиков. Удачи, от меня
         </p>
       </div>
     </div>
