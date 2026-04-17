@@ -240,14 +240,13 @@ export default function AddPayerPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-accent mb-1">Отчество *</label>
+              <label className="block text-sm font-medium text-accent mb-1">Отчество</label>
               <input
                 type="text"
                 name="middle_name"
                 value={formData.middle_name || ''}
                 onChange={handleChange}
                 className="input"
-                required
               />
             </div>
           </div>
