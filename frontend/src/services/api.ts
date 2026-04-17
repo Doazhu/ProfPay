@@ -21,6 +21,21 @@ import type {
   FacultyCreate,
 } from '../types';
 
+/**
+ * Извлекает читаемое сообщение об ошибке из ответа API.
+ * FastAPI при 422 возвращает detail как массив объектов {type, loc, msg, input, ctx},
+ * а при других ошибках — как строку.
+ */
+export function extractErrorMessage(error: any, fallback = 'Произошла ошибка'): string {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((d: any) => (typeof d === 'string' ? d : d.msg || JSON.stringify(d))).join('; ');
+  }
+  if (detail && typeof detail === 'object' && detail.msg) return detail.msg;
+  return fallback;
+}
+
 // Create axios instance
 const api = axios.create({
   baseURL: '/api/v1',

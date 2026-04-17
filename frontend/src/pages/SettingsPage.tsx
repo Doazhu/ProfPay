@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Faculty, PaymentSettings, BudgetSettings } from '../types';
-import { facultyApi, paymentSettingsApi, budgetSettingsApi } from '../services/api';
+import { facultyApi, paymentSettingsApi, budgetSettingsApi, extractErrorMessage } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
 /** Возвращает текущий учебный год в формате "2025-2026" */
@@ -118,7 +118,7 @@ export default function SettingsPage() {
       await facultyApi.delete(faculty.id);
       setFaculties(await facultyApi.getAll(false));
     } catch (error: any) {
-      alert(error.response?.data?.detail || 'Ошибка при удалении деректората');
+      alert(extractErrorMessage(error, 'Ошибка при удалении деректората'));
     }
   };
 
@@ -138,7 +138,7 @@ export default function SettingsPage() {
       setNewSpringAmount('');
       setPaymentSettings(await paymentSettingsApi.getAll());
     } catch (error: any) {
-      alert(error.response?.data?.detail || 'Ошибка при создании настроек');
+      alert(extractErrorMessage(error, 'Ошибка при создании настроек'));
     }
   };
 
@@ -238,7 +238,7 @@ export default function SettingsPage() {
         <div className="card animate-fade-in-fast">
           <h2 className="text-base md:text-lg font-semibold text-dark mb-4">Деректораты</h2>
           <p className="text-sm text-accent mb-4">
-            Например: ИИТА — Институт информационных технологий и автоматизации
+            Например: ИИТА — Институт Информационных Технологий и Автоматизации
           </p>
 
           {/* Add Form */}

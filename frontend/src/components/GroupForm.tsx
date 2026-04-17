@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Faculty, StudentGroup, GroupCreate } from '../types';
-import { facultyApi } from '../services/api';
+import { facultyApi, extractErrorMessage } from '../services/api';
 
 interface GroupFormProps {
   group?: StudentGroup;
@@ -57,7 +57,7 @@ export default function GroupForm({ group, onSubmit, onCancel }: GroupFormProps)
     try {
       await onSubmit(formData);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Ошибка при сохранении группы');
+      setError(extractErrorMessage(err, 'Ошибка при сохранении группы'));
     } finally {
       setLoading(false);
     }

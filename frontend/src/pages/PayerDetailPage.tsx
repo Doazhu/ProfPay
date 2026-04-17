@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import type { Payer, Payment, Faculty, PaymentSettings } from '../types';
-import { payerApi, paymentApi, facultyApi, budgetSettingsApi, paymentSettingsApi } from '../services/api';
+import { payerApi, paymentApi, facultyApi, budgetSettingsApi, paymentSettingsApi, extractErrorMessage } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
 /** Возвращает текущий учебный год в формате "2025-2026" */
@@ -164,7 +164,7 @@ export default function PayerDetailPage() {
       setPayer(updated);
       setIsEditing(false);
     } catch (error: any) {
-      setSaveError(error.response?.data?.detail || 'Ошибка при сохранении');
+      setSaveError(extractErrorMessage(error, 'Ошибка при сохранении'));
     }
   };
 
@@ -175,7 +175,7 @@ export default function PayerDetailPage() {
       await payerApi.delete(Number(id));
       navigate('/payers');
     } catch (error: any) {
-      setSaveError(error.response?.data?.detail || 'Ошибка при удалении');
+      setSaveError(extractErrorMessage(error, 'Ошибка при удалении'));
     }
   };
 
@@ -282,17 +282,17 @@ export default function PayerDetailPage() {
   return (
     <div className="max-w-4xl mx-auto animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <button
-            onClick={() => navigate(-1)}
-            className="text-accent hover:text-dark mb-2 flex items-center gap-1 text-sm transition-colors duration-150"
-          >
-            <span>←</span> Назад
-          </button>
-          <h1 className="text-2xl font-bold text-dark">{payer.full_name}</h1>
+      <div className="mb-6">
+        <button
+          onClick={() => navigate(-1)}
+          className="text-accent hover:text-dark mb-2 flex items-center gap-1 text-sm transition-colors duration-150"
+        >
+          <span>←</span> Назад
+        </button>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <h1 className="text-xl sm:text-2xl font-bold text-dark break-words">{payer.full_name}</h1>
+          <StatusBadge status={payer.status} />
         </div>
-        <StatusBadge status={payer.status} />
       </div>
 
       {/* Error */}
@@ -305,7 +305,7 @@ export default function PayerDetailPage() {
 
       {/* Main Card */}
       <div className="card mb-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
           <h2 className="text-lg font-semibold text-dark">Информация о плательщике</h2>
           {canEdit && !isEditing && (
             <div className="flex gap-3">
@@ -350,7 +350,7 @@ export default function PayerDetailPage() {
               </div>
             </div>
 
-            <div style={{ maxWidth: '220px' }}>
+            <div className="w-full sm:max-w-[220px]">
               <label className="block text-sm text-accent mb-1">Дата рождения</label>
               <input type="date" value={editData.date_of_birth}
                 onChange={(e) => setEditData({ ...editData, date_of_birth: e.target.value })}
@@ -490,9 +490,9 @@ export default function PayerDetailPage() {
                 className="input min-h-[80px]" />
             </div>
 
-            <div className="flex gap-2 pt-4 border-t border-light-dark">
-              <button onClick={handleSaveEdit} className="btn-primary">Сохранить</button>
-              <button onClick={() => { setIsEditing(false); setSaveError(''); }} className="btn-ghost">Отмена</button>
+            <div className="flex flex-col sm:flex-row gap-2 pt-4 border-t border-light-dark">
+              <button onClick={handleSaveEdit} className="btn-primary w-full sm:w-auto">Сохранить</button>
+              <button onClick={() => { setIsEditing(false); setSaveError(''); }} className="btn-ghost w-full sm:w-auto">Отмена</button>
             </div>
           </div>
         ) : (
@@ -501,25 +501,25 @@ export default function PayerDetailPage() {
             <div>
               <h3 className="text-sm font-medium text-accent mb-3">Личные данные</h3>
               <div className="space-y-2">
-                <p className="flex items-center gap-2">
-                  <span className="text-accent">Дата рождения:</span>
+                <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="text-accent text-sm">Дата рождения:</span>
                   <span className="text-dark">{payer.date_of_birth ? formatDate(payer.date_of_birth) : '—'}</span>
                 </p>
-                <p className="flex items-center gap-2">
-                  <span className="text-accent">Email:</span>
-                  <span className="text-dark">{payer.email || '—'}</span>
+                <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="text-accent text-sm">Email:</span>
+                  <span className="text-dark break-all">{payer.email || '—'}</span>
                 </p>
-                <p className="flex items-center gap-2">
-                  <span className="text-accent">Телефон:</span>
+                <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="text-accent text-sm">Телефон:</span>
                   <span className="text-dark">{payer.phone || '—'}</span>
                 </p>
-                <p className="flex items-center gap-2">
-                  <span className="text-accent">Telegram:</span>
-                  <span className="text-dark">{payer.telegram || '—'}</span>
+                <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="text-accent text-sm">Telegram:</span>
+                  <span className="text-dark break-all">{payer.telegram || '—'}</span>
                 </p>
-                <p className="flex items-center gap-2">
-                  <span className="text-accent">VK:</span>
-                  <span className="text-dark">{payer.vk || '—'}</span>
+                <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="text-accent text-sm">VK:</span>
+                  <span className="text-dark break-all">{payer.vk || '—'}</span>
                 </p>
               </div>
             </div>
@@ -527,34 +527,34 @@ export default function PayerDetailPage() {
             <div>
               <h3 className="text-sm font-medium text-accent mb-3">Обучение</h3>
               <div className="space-y-2">
-                <p className="flex items-center gap-2">
-                  <span className="text-accent">Деректорат:</span>
+                <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="text-accent text-sm">Деректорат:</span>
                   <span className="text-dark">{getFacultyName(payer.faculty_id)}</span>
                 </p>
                 {payer.department && (
-                  <p className="flex items-center gap-2">
-                    <span className="text-accent">Кафедра:</span>
+                  <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    <span className="text-accent text-sm">Кафедра:</span>
                     <span className="text-dark">{payer.department}</span>
                   </p>
                 )}
-                <p className="flex items-center gap-2">
-                  <span className="text-accent">Группа:</span>
+                <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="text-accent text-sm">Группа:</span>
                   <span className="text-dark font-medium">{payer.group_name || '—'}</span>
                 </p>
-                <p className="flex items-center gap-2">
-                  <span className="text-accent">Курс:</span>
+                <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="text-accent text-sm">Курс:</span>
                   <span className="text-dark">{payer.course ? `${payer.course} курс` : '—'}</span>
                 </p>
               </div>
             </div>
 
             {payer.is_budget && (
-              <div className="col-span-2">
+              <div className="col-span-1 md:col-span-2">
                 <h3 className="text-sm font-medium text-accent mb-3">Бюджетник</h3>
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="flex flex-wrap gap-6">
+                  <div className="flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-6">
                     <p className="flex items-center gap-2">
-                      <span className="text-accent">Стипендия:</span>
+                      <span className="text-accent text-sm">Стипендия:</span>
                       <span className="text-dark font-medium">
                         {payer.stipend_amount
                           ? new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 }).format(payer.stipend_amount)
@@ -562,12 +562,12 @@ export default function PayerDetailPage() {
                       </span>
                     </p>
                     <p className="flex items-center gap-2">
-                      <span className="text-accent">Процент:</span>
+                      <span className="text-accent text-sm">Процент:</span>
                       <span className="text-dark font-medium">{payer.budget_percent ? `${payer.budget_percent}%` : '—'}</span>
                     </p>
                     {payer.stipend_amount && payer.budget_percent && (
                       <p className="flex items-center gap-2">
-                        <span className="text-accent">К оплате:</span>
+                        <span className="text-accent text-sm">К оплате:</span>
                         <span className="text-primary font-bold">
                           {new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 2 }).format(
                             Math.round(payer.stipend_amount * payer.budget_percent) / 100
@@ -581,9 +581,9 @@ export default function PayerDetailPage() {
             )}
 
             {payer.notes && (
-              <div className="col-span-2">
+              <div className="col-span-1 md:col-span-2">
                 <h3 className="text-sm font-medium text-accent mb-2">Примечания</h3>
-                <p className="text-dark bg-light-dark/30 p-3 rounded-lg">{payer.notes}</p>
+                <p className="text-dark bg-light-dark/30 p-3 rounded-lg break-words">{payer.notes}</p>
               </div>
             )}
           </div>
@@ -592,7 +592,7 @@ export default function PayerDetailPage() {
 
       {/* Payments Card */}
       <div className="card">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <div>
             <h2 className="text-lg font-semibold text-dark">История платежей</h2>
             <p className="text-accent text-sm">
@@ -602,7 +602,7 @@ export default function PayerDetailPage() {
           {canEdit && (
             <button
               onClick={() => setShowPaymentForm(!showPaymentForm)}
-              className="btn-primary"
+              className="btn-primary w-full sm:w-auto"
             >
               + Добавить платёж
             </button>
@@ -723,9 +723,9 @@ export default function PayerDetailPage() {
                   className="input" placeholder="Примечание..." />
               </div>
             </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={handleAddPayment} className="btn-primary">Добавить</button>
-              <button onClick={() => setShowPaymentForm(false)} className="btn-ghost">Отмена</button>
+            <div className="flex flex-col sm:flex-row gap-2 mt-4">
+              <button onClick={handleAddPayment} className="btn-primary w-full sm:w-auto">Добавить</button>
+              <button onClick={() => setShowPaymentForm(false)} className="btn-ghost w-full sm:w-auto">Отмена</button>
             </div>
           </div>
         )}
@@ -738,9 +738,9 @@ export default function PayerDetailPage() {
             {payments.map((payment) => (
               <div
                 key={payment.id}
-                className="flex items-center justify-between p-3 bg-light-dark/30 rounded-lg transition-all duration-150 hover:bg-light-dark/50"
+                className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 gap-2 bg-light-dark/30 rounded-lg transition-all duration-150 hover:bg-light-dark/50"
               >
-                <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-center gap-3 flex-wrap">
                   <div className="text-lg font-bold text-primary">
                     {formatMoney(payment.amount)}
                   </div>
@@ -761,7 +761,7 @@ export default function PayerDetailPage() {
                 {canEdit && (
                   <button
                     onClick={() => handleDeletePayment(payment.id)}
-                    className="text-red-600 hover:text-red-700 text-sm transition-colors duration-150 ml-2"
+                    className="text-red-600 hover:text-red-700 text-sm transition-colors duration-150 self-end sm:self-auto sm:ml-2"
                   >
                     Удалить
                   </button>

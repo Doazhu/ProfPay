@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Faculty, PayerCreate, BudgetSettings, PaymentSettings } from '../types';
-import { payerApi, paymentApi, facultyApi, budgetSettingsApi, paymentSettingsApi } from '../services/api';
+import { payerApi, paymentApi, facultyApi, budgetSettingsApi, paymentSettingsApi, extractErrorMessage } from '../services/api';
 
 /** Возвращает текущий учебный год в формате "2025-2026" */
 function getCurrentAcademicYear(): string {
@@ -191,8 +191,7 @@ export default function AddPayerPage() {
 
       navigate(`/payers/${payer.id}`);
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } };
-      setError(error.response?.data?.detail || 'Ошибка при создании плательщика');
+      setError(extractErrorMessage(err, 'Ошибка при создании плательщика'));
     } finally {
       setIsLoading(false);
     }

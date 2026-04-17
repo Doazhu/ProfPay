@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authApi } from '../services/api';
+import { authApi, extractErrorMessage } from '../services/api';
 
 export default function ChangePasswordPage() {
   const navigate = useNavigate();
@@ -40,7 +40,7 @@ export default function ChangePasswordPage() {
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Ошибка при смене пароля');
+      setError(extractErrorMessage(err, 'Ошибка при смене пароля'));
     } finally {
       setIsLoading(false);
     }

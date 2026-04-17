@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { User, UserRole } from '../types';
-import { userApi } from '../services/api';
+import { userApi, extractErrorMessage } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
 const roleLabels: Record<UserRole, string> = {
@@ -73,7 +73,7 @@ export default function UsersPage() {
       setShowCreateForm(false);
       await loadUsers();
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Ошибка при создании пользователя');
+      setError(extractErrorMessage(err, 'Ошибка при создании пользователя'));
     }
   };
 
@@ -101,14 +101,7 @@ export default function UsersPage() {
       await loadUsers();
     } catch (err: any) {
       console.error('Failed to update user:', err);
-      const detail = err.response?.data?.detail;
-      if (typeof detail === 'string') {
-        setError(detail);
-      } else if (Array.isArray(detail)) {
-        setError(detail.map((d: any) => d.msg || d).join('; '));
-      } else {
-        setError('Ошибка при обновлении пользователя');
-      }
+      setError(extractErrorMessage(err, 'Ошибка при обновлении пользователя'));
     }
   };
 
@@ -129,7 +122,7 @@ export default function UsersPage() {
       await loadUsers();
     } catch (err: any) {
       console.error('Failed to delete user:', err);
-      setError(err.response?.data?.detail || 'Ошибка при удалении пользователя');
+      setError(extractErrorMessage(err, 'Ошибка при удалении пользователя'));
     }
   };
 
