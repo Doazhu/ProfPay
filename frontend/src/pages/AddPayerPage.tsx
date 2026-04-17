@@ -52,7 +52,7 @@ export default function AddPayerPage() {
   const [allPaymentSettings, setAllPaymentSettings] = useState<PaymentSettings[]>([]);
 
   // Payment with creation
-  const [addPayment, setAddPayment] = useState(false);
+  const [addPayment, setAddPayment] = useState(true);
   const [paymentData, setPaymentData] = useState({
     amount: '',
     payment_date: new Date().toISOString().split('T')[0],
@@ -240,13 +240,14 @@ export default function AddPayerPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-accent mb-1">Отчество</label>
+              <label className="block text-sm font-medium text-accent mb-1">Отчество *</label>
               <input
                 type="text"
                 name="middle_name"
                 value={formData.middle_name || ''}
                 onChange={handleChange}
                 className="input"
+                required
               />
             </div>
           </div>
@@ -319,12 +320,13 @@ export default function AddPayerPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Деректорат (бывший факультет) */}
             <div>
-              <label className="block text-sm font-medium text-accent mb-1">Деректорат</label>
+              <label className="block text-sm font-medium text-accent mb-1">Деректорат *</label>
               <select
                 name="faculty_id"
                 value={formData.faculty_id || ''}
                 onChange={handleChange}
                 className="input"
+                required
               >
                 <option value="">Не указан</option>
                 {faculties.map((f) => (
@@ -353,7 +355,7 @@ export default function AddPayerPage() {
             {/* Группа — свободный ввод */}
             <div>
               <label className="block text-sm font-medium text-accent mb-1">
-                Группа
+                Группа *
                 <span className="text-xs text-accent/60 ml-1 font-normal">(формат: 1-мд-35)</span>
               </label>
               <input
@@ -363,6 +365,7 @@ export default function AddPayerPage() {
                 onChange={handleChange}
                 className="input"
                 placeholder="Например: 1-мд-35"
+                required
               />
               <p className="text-xs text-accent/70 mt-1">Курс определяется автоматически из кода группы</p>
             </div>
@@ -569,7 +572,7 @@ export default function AddPayerPage() {
                   <label className="block text-sm text-accent mb-1">Сумма *</label>
                   <input type="number" value={paymentData.amount}
                     onChange={(e) => setPaymentData({ ...paymentData, amount: e.target.value })}
-                    placeholder="0" className="input" min="0" />
+                    placeholder="0" className="input" min="0" required />
                 </div>
                 <div>
                   <label className="block text-sm text-accent mb-1">Дата платежа</label>
