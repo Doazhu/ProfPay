@@ -3,7 +3,6 @@
 Учёт плательщиков профсоюзных взносов СПбГУПТД. FastAPI + PostgreSQL + React.
 
 - Запуск и деплой: **[deploy.md](deploy.md)**
-- Домен: `profpay.site`
 
 ## Как устроено
 
