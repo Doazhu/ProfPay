@@ -1,51 +1,55 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
+import { HamburgerMenuIcon } from '@radix-ui/react-icons';
+import { Flex, IconButton, Text } from '@radix-ui/themes';
 import Sidebar from './Sidebar';
-
-// Burger menu icon
-const MenuIcon = () => (
-  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-  </svg>
-);
+import { ThemeToggleButton } from './ThemeToggle';
 
 export default function Layout() {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-  const openSidebar = () => setIsSidebarOpen(true);
-  const closeSidebar = () => setIsSidebarOpen(false);
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen" style={{ background: 'linear-gradient(135deg, #F0F2F5 0%, #E8EDF4 50%, #F0F2F5 100%)' }}>
-      {/* Desktop sidebar - always visible on md+ */}
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--color-background)' }}>
+      {/* Боковое меню: на широком экране всегда, на узком — выдвижное */}
       <div className="hidden md:block">
         <Sidebar />
       </div>
-
-      {/* Mobile sidebar - controlled by state */}
       <div className="md:hidden">
-        <Sidebar isOpen={isSidebarOpen} onClose={closeSidebar} />
+        <Sidebar isOpen={isSidebarOpen} onClose={() => setSidebarOpen(false)} />
       </div>
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Mobile header with glassmorphism */}
-        <header className="md:hidden sticky top-0 z-30 px-4 py-3 flex items-center gap-3 border-b border-white/60"
-          style={{ background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        {/* Шапка для узкого экрана */}
+        <Flex
+          align="center"
+          gap="3"
+          px="4"
+          py="3"
+          className="md:hidden"
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 10,
+            background: 'var(--color-panel-solid)',
+            borderBottom: '1px solid var(--gray-a5)',
+          }}
         >
-          <button
-            onClick={openSidebar}
-            className="p-2 -ml-2 rounded-xl text-accent hover:bg-light-dark/50 active:bg-light-darker touch-target"
+          <IconButton
+            variant="ghost"
+            color="gray"
+            onClick={() => setSidebarOpen(true)}
             aria-label="Открыть меню"
           >
-            <MenuIcon />
-          </button>
-          <h1 className="text-lg font-bold text-primary">ProfPay</h1>
-        </header>
+            <HamburgerMenuIcon width="20" height="20" />
+          </IconButton>
+          <Text weight="bold" size="3">ProfPay</Text>
+          <Flex ml="auto">
+            <ThemeToggleButton />
+          </Flex>
+        </Flex>
 
-        {/* Page content */}
-        <main className="flex-1 overflow-auto">
-          <div className="p-4 md:p-6 lg:p-8 max-w-[1400px]">
+        <main style={{ flex: 1, overflow: 'auto' }}>
+          <div className="p-4 md:p-6" style={{ maxWidth: 1400 }}>
             <Outlet />
           </div>
         </main>

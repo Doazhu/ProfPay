@@ -1,4 +1,8 @@
 import { useEffect, useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
+import { Badge, Box, Card, Flex, Heading, Link, RadioCards, Text } from '@radix-ui/themes';
+import { ThemeAppearanceControl } from '../components/ThemeToggle';
+import { useTheme, type Skin } from '../theme/ThemeContext';
 import type { Faculty, PaymentSettings, BudgetSettings } from '../types';
 import { facultyApi, paymentSettingsApi, budgetSettingsApi, extractErrorMessage } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -212,6 +216,8 @@ export default function SettingsPage() {
         <p className="text-accent mt-1">Управление справочниками и настройками — СПБГУПТД</p>
       </div>
 
+      <AppearanceSettings />
+
       {/* Tabs */}
       <div className="flex flex-wrap gap-2 mb-6">
         {([
@@ -352,7 +358,7 @@ export default function SettingsPage() {
           </p>
 
           {/* Add Form */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 mb-6 p-3 md:p-4 bg-light-dark/30 rounded-lg">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 mb-6 p-3 md:p-4 bg-light-dark rounded-lg">
             <select
               value={newAcademicYear}
               onChange={(e) => setNewAcademicYear(e.target.value)}
@@ -555,13 +561,88 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {/* Где теперь лежит ключ шифрования */}
+      <div className="card mt-5">
+        <h2 className="text-base font-semibold text-dark mb-1">Шифрование данных</h2>
+        <p className="text-sm text-accent">
+          Контакты, даты рождения и примечания хранятся в базе зашифрованными.
+          Ключ задаётся переменной <code className="font-mono text-xs bg-light px-1 py-0.5 rounded">ENCRYPTION_KEY</code> в
+          файле <code className="font-mono text-xs bg-light px-1 py-0.5 rounded">.env</code> на сервере и в интерфейс не выводится.
+        </p>
+        <p className="hint mt-2">
+          Дамп базы без этого ключа прочитать нельзя — храните их раздельно.
+          Потеря ключа означает потерю контактов; ФИО, группы и суммы останутся.
+        </p>
+      </div>
+
       {/* Info */}
       <div className="mt-6 p-3 md:p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
         <p className="text-sm text-yellow-800">
           <strong>Примечание:</strong> Деактивация деректората скрывает его из выпадающих списков, но не удаляет связанные данные плательщиков.
-          Полное удаление возможно только если нет привязанных плательщиков. Удачи, от меня
+          Полное удаление возможно только если нет привязанных плательщиков.
         </p>
       </div>
     </div>
+  );
+}
+
+/**
+ * Оформление интерфейса.
+ *
+ * Классические стили лежат отдельным файлом и подгружаются только при
+ * выборе — у тех, кто остался на новом виде, они не скачиваются вовсе.
+ */
+function AppearanceSettings() {
+  const { skin, setSkin } = useTheme();
+
+  const options: { value: Skin; title: string; note: string }[] = [
+    { value: 'radix', title: 'Новое', note: 'Radix Themes, светлая и тёмная тема' },
+    { value: 'classic', title: 'Классическое', note: 'прежний плоский вид, грузится по требованию' },
+  ];
+
+  return (
+    <Card size="2" mb="5">
+      <Heading size="3" mb="1">Оформление</Heading>
+      <Text as="p" size="1" color="gray" mb="3">
+        Настройка сохраняется в браузере и действует только для вас.
+      </Text>
+
+      <Flex direction="column" gap="4">
+        <Box>
+          <Text as="div" size="2" weight="medium" mb="2">Тема</Text>
+          <ThemeAppearanceControl />
+        </Box>
+
+        <Box>
+          <Text as="div" size="2" weight="medium" mb="2">Вид интерфейса</Text>
+          <RadioCards.Root
+            value={skin}
+            onValueChange={(value) => setSkin(value as Skin)}
+            columns={{ initial: '1', sm: '2' }}
+            size="1"
+          >
+            {options.map((option) => (
+              <RadioCards.Item key={option.value} value={option.value}>
+                <Flex direction="column" align="start" gap="1">
+                  <Flex align="center" gap="2">
+                    <Text weight="medium" size="2">{option.title}</Text>
+                    {option.value === 'classic' && (
+                      <Badge size="1" variant="soft" color="gray">по требованию</Badge>
+                    )}
+                  </Flex>
+                  <Text size="1" color="gray">{option.note}</Text>
+                </Flex>
+              </RadioCards.Item>
+            ))}
+          </RadioCards.Root>
+        </Box>
+
+        <Text size="1" color="gray">
+          Суммы и справочники отсюда подставляются в{' '}
+          <Link asChild><RouterLink to="/add-payer">форму добавления плательщика</RouterLink></Link>
+          {' '}— там видно, что именно применяется.
+        </Text>
+      </Flex>
+    </Card>
   );
 }

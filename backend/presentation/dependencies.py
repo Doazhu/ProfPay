@@ -1,135 +1,80 @@
-"""
-FastAPI dependencies for authentication and authorization.
-"""
+"""Зависимости FastAPI: аутентификация и права."""
 from typing import Optional
-from datetime import datetime
 
-from fastapi import Depends, HTTPException, status, Request, Cookie
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Cookie, Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from backend.core.database import get_db
-from backend.core.security import decode_token, decrypt_session_key
+from backend.core.security import decode_token
 from backend.domain.models import SystemUser, UserRole
 from backend.infrastructure.repositories import UserRepository
-
 
 security = HTTPBearer(auto_error=False)
 
 
+def client_ip(request: Request) -> str:
+    """
+    IP клиента с учётом обратного прокси.
+
+    Берётся первый адрес из X-Forwarded-For — его ставит host nginx.
+    Заголовок подделываем только доверенным прокси; наружу порт бэкенда
+    не опубликован, так что источник заголовка контролируем мы.
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 async def get_current_user(
-    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     access_token: Optional[str] = Cookie(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ) -> SystemUser:
-    """
-    Get current authenticated user from JWT token.
-    Supports both Bearer token and HttpOnly cookie.
-    """
-    token = None
-
-    # Try Bearer token first
-    if credentials:
-        token = credentials.credentials
-    # Fallback to cookie
-    elif access_token:
-        token = access_token
+    """Текущий пользователь из JWT: сначала Bearer, потом HttpOnly-кука."""
+    token = credentials.credentials if credentials else access_token
 
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
+            detail="Не аутентифицирован",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
     payload = decode_token(token)
-    if not payload:
+    if not payload or payload.type != "access":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
+            detail="Токен недействителен или истёк",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if payload.type != "access":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token type",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    user_repo = UserRepository(db)
-    user = user_repo.get_by_id(int(payload.sub))
+    try:
+        user = UserRepository(db).get_by_id(int(payload.sub))
+    except (TypeError, ValueError):
+        user = None
 
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
-
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Пользователь не найден")
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User is deactivated",
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Учётная запись отключена")
 
     return user
 
 
-async def get_current_active_user(
-    current_user: SystemUser = Depends(get_current_user)
-) -> SystemUser:
-    """Get current active user."""
-    if not current_user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Inactive user"
-        )
-    return current_user
-
-
 def require_role(*roles: UserRole):
-    """
-    Dependency factory for role-based access control.
-    Usage: Depends(require_role(UserRole.ADMIN, UserRole.OPERATOR))
-    """
-    async def role_checker(
-        current_user: SystemUser = Depends(get_current_user)
-    ) -> SystemUser:
+    """Фабрика зависимостей для проверки роли."""
+    async def checker(current_user: SystemUser = Depends(get_current_user)) -> SystemUser:
         if current_user.role not in roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access denied. Required roles: {[r.value for r in roles]}"
+                detail="Недостаточно прав для этого действия",
             )
         return current_user
-    return role_checker
+    return checker
 
 
-# Convenience dependencies for common role combinations
 require_admin = require_role(UserRole.ADMIN)
 require_operator = require_role(UserRole.ADMIN, UserRole.OPERATOR)
 require_any_role = require_role(UserRole.ADMIN, UserRole.OPERATOR, UserRole.VIEWER)
-
-
-async def get_encryption_key(
-    request: Request,
-    encryption_key: Optional[str] = Cookie(None),
-) -> bytes:
-    """
-    Extract and decrypt the master encryption key from the session cookie.
-    Must be used as a dependency in all endpoints that read/write sensitive data.
-    """
-    if not encryption_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Encryption key not found. Please log in again.",
-        )
-
-    master_key = decrypt_session_key(encryption_key)
-    if master_key is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid encryption key. Please log in again.",
-        )
-
-    return master_key

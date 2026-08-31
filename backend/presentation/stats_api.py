@@ -1,52 +1,50 @@
-"""
-Statistics and Reports API endpoints.
-"""
+"""Статистика и журнал изменений."""
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from backend.core.database import get_db
 from backend.application.schemas import (
-    DashboardStats, FacultyStats, MonthlyStats
+    AuditLogResponse, DashboardStats, FacultyStats, MonthlyStats,
 )
+from backend.core.database import get_db
 from backend.domain.models import SystemUser
-from backend.infrastructure.repositories import StatsRepository
-from backend.presentation.dependencies import require_any_role, get_encryption_key
+from backend.infrastructure.repositories import AuditRepository, StatsRepository
+from backend.presentation.dependencies import require_admin, require_any_role
 
-
-router = APIRouter(prefix="/stats", tags=["Statistics"])
+router = APIRouter(prefix="/stats", tags=["Статистика"])
 
 
 @router.get("/dashboard", response_model=DashboardStats)
-async def get_dashboard_stats(
+async def dashboard(
     db: Session = Depends(get_db),
     current_user: SystemUser = Depends(require_any_role),
-    encryption_key: bytes = Depends(get_encryption_key),
 ):
-    """Get overall dashboard statistics."""
-    stats_repo = StatsRepository(db, encryption_key)
-    return stats_repo.get_dashboard_stats()
+    return StatsRepository(db).dashboard()
 
 
 @router.get("/by-faculty", response_model=list[FacultyStats])
-async def get_faculty_stats(
+async def by_faculty(
     db: Session = Depends(get_db),
     current_user: SystemUser = Depends(require_any_role),
-    encryption_key: bytes = Depends(get_encryption_key),
 ):
-    """Get statistics grouped by faculty."""
-    stats_repo = StatsRepository(db, encryption_key)
-    return stats_repo.get_faculty_stats()
+    return StatsRepository(db).by_faculty()
 
 
 @router.get("/monthly", response_model=list[MonthlyStats])
-async def get_monthly_stats(
-    year: int = Query(default_factory=lambda: datetime.now().year),
+async def monthly(
+    year: int = Query(default_factory=lambda: datetime.now().year, ge=2000, le=2100),
     db: Session = Depends(get_db),
     current_user: SystemUser = Depends(require_any_role),
-    encryption_key: bytes = Depends(get_encryption_key),
 ):
-    """Get monthly payment statistics for a year."""
-    stats_repo = StatsRepository(db, encryption_key)
-    return stats_repo.get_monthly_stats(year)
+    return StatsRepository(db).monthly(year)
+
+
+@router.get("/audit", response_model=list[AuditLogResponse])
+async def audit_log(
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    current_user: SystemUser = Depends(require_admin),
+):
+    """Журнал изменений. Раньше таблица существовала, но в неё никто не писал."""
+    return AuditRepository(db).recent(limit=limit)

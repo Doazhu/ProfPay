@@ -1,6 +1,11 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import type { Payer, Payment, Faculty, PaymentSettings } from '../types';
+import { EDUCATION_LEVEL_LABELS } from '../types';
+import GroupInput, {
+  admissionYearFromCourse, buildGroupName, courseFromAdmissionYear,
+  currentAcademicYearStart, parseGroupName, type GroupValue,
+} from '../components/GroupInput';
 import { payerApi, paymentApi, facultyApi, budgetSettingsApi, paymentSettingsApi, extractErrorMessage } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -12,23 +17,13 @@ function getCurrentAcademicYear(): string {
   return month >= 9 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
 }
 
-/** Пытается извлечь курс из кода группы вида "1-мд-35" */
-function parseCourseFromGroup(groupCode: string): number | undefined {
-  const match = groupCode.trim().match(/^(\d)/);
-  if (match) {
-    const c = parseInt(match[1]);
-    if (c >= 1 && c <= 6) return c;
-  }
-  return undefined;
-}
-
 // Status Badge
 function StatusBadge({ status }: { status: string }) {
   const config: Record<string, { label: string; className: string }> = {
-    paid: { label: 'Оплачено', className: 'bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm' },
-    partial: { label: 'Не оплачено', className: 'bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm' },
-    unpaid: { label: 'Не оплачено', className: 'bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm' },
-    exempt: { label: 'Освобождён', className: 'bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm' },
+    paid:    { label: 'Оплачено',   className: 'badge-success' },
+    partial: { label: 'Частично',   className: 'badge-warning' },
+    unpaid:  { label: 'Не оплачено', className: 'badge-danger' },
+    exempt:  { label: 'Освобождён', className: 'badge-info' },
   };
   const { label, className } = config[status] || config.unpaid;
   return <span className={className}>{label}</span>;
@@ -72,12 +67,17 @@ export default function PayerDetailPage() {
     telegram: '',
     vk: '',
     faculty_id: undefined as number | undefined,
-    group_name: '',
-    course: undefined as number | undefined,
     department: '',
     notes: '',
     status: 'unpaid' as 'paid' | 'unpaid',
   });
+
+  // Группа правится теми же полями, что и при добавлении: курс, буквы, номер.
+  const [group, setGroup] = useState<GroupValue>({
+    course: 1, letters: '', number: '',
+    admissionYear: admissionYearFromCourse(1), level: 'bachelor',
+  });
+  const [yearTouched, setYearTouched] = useState(true);  // у записи год уже задан
 
   // Payment settings (loaded from backend)
   const [allPaymentSettings, setAllPaymentSettings] = useState<PaymentSettings[]>([]);
@@ -96,13 +96,7 @@ export default function PayerDetailPage() {
     if (id) loadData();
   }, [id]);
 
-  // Auto-extract course when group_name changes during edit
-  useEffect(() => {
-    if (editData.group_name && !editData.course) {
-      const c = parseCourseFromGroup(editData.group_name);
-      if (c) setEditData(prev => ({ ...prev, course: c }));
-    }
-  }, [editData.group_name]);
+
 
   const loadData = async () => {
     if (!id) return;
@@ -118,6 +112,17 @@ export default function PayerDetailPage() {
       setAllPaymentSettings(paySettingsData);
       setPayer(payerData);
       setPayments(paymentsData);
+
+      const parsed = parseGroupName(payerData.group_name);
+      setGroup({
+        course: parsed.course
+          ?? courseFromAdmissionYear(payerData.admission_year || currentAcademicYearStart()),
+        letters: parsed.letters,
+        number: parsed.number,
+        admissionYear: payerData.admission_year || currentAcademicYearStart(),
+        level: payerData.education_level || 'bachelor',
+      });
+      setYearTouched(true);
       setFaculties(facultyData);
       setEditIsBudget(payerData.is_budget);
       setEditStipend(payerData.stipend_amount ? String(payerData.stipend_amount) : '');
@@ -132,8 +137,6 @@ export default function PayerDetailPage() {
         telegram: payerData.telegram || '',
         vk: payerData.vk || '',
         faculty_id: payerData.faculty_id || undefined,
-        group_name: payerData.group_name || '',
-        course: payerData.course || undefined,
         department: payerData.department || '',
         notes: payerData.notes || '',
         status: (payerData.status === 'paid') ? 'paid' : 'unpaid',
@@ -160,8 +163,9 @@ export default function PayerDetailPage() {
         telegram: editData.telegram || undefined,
         vk: editData.vk || undefined,
         faculty_id: editData.faculty_id || undefined,
-        group_name: editData.group_name || undefined,
-        course: editData.course || undefined,
+        group_name: buildGroupName(group) || undefined,
+        admission_year: group.admissionYear,
+        education_level: group.level,
         department: editData.department || undefined,
         middle_name: editData.middle_name || undefined,
       });
@@ -444,26 +448,21 @@ export default function PayerDetailPage() {
               </div>
               <div>
                 <label className="block text-sm text-accent mb-1">
-                  Кафедра <span className="text-accent/60 font-normal text-xs">(необязательно)</span>
+                  Кафедра <span className="text-accent-light font-normal text-xs">(необязательно)</span>
                 </label>
                 <input type="text" value={editData.department}
                   onChange={(e) => setEditData({ ...editData, department: e.target.value })}
                   className="input" placeholder="Например: ЦИАТ" />
               </div>
-              <div>
-                <label className="block text-sm text-accent mb-1">
-                  Группа <span className="text-xs text-accent/60 font-normal">(формат: 1-мд-35)</span>
-                </label>
-                <input type="text" value={editData.group_name}
-                  onChange={(e) => setEditData({ ...editData, group_name: e.target.value })}
-                  className="input" placeholder="Например: 1-мд-35" />
-              </div>
-              <div>
-                <label className="block text-sm text-accent mb-1">Курс</label>
-                <input type="number" value={editData.course || ''}
-                  onChange={(e) => setEditData({ ...editData, course: e.target.value ? Number(e.target.value) : undefined })}
-                  className="input" placeholder="1–6" min="1" max="6" />
-              </div>
+            </div>
+
+            <div className="mt-4">
+              <GroupInput
+                value={group}
+                onChange={setGroup}
+                yearTouched={yearTouched}
+                onYearTouchedChange={setYearTouched}
+              />
             </div>
 
             {/* Статус оплаты */}
@@ -543,11 +542,22 @@ export default function PayerDetailPage() {
                 )}
                 <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                   <span className="text-accent text-sm">Группа:</span>
-                  <span className="text-dark font-medium">{payer.group_name || '—'}</span>
+                  <span className="text-dark font-medium">{payer.group_code || payer.group_name || '—'}</span>
                 </p>
                 <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                   <span className="text-accent text-sm">Курс:</span>
-                  <span className="text-dark">{payer.course ? `${payer.course} курс` : '—'}</span>
+                  <span className="text-dark">
+                    {payer.is_archived
+                      ? 'обучение окончено'
+                      : payer.course ? `${payer.course} курс` : '—'}
+                  </span>
+                </p>
+                <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="text-accent text-sm">Обучение:</span>
+                  <span className="text-dark">
+                    {EDUCATION_LEVEL_LABELS[payer.education_level] || '—'}
+                    {payer.admission_year && `, с ${payer.admission_year}/${payer.admission_year + 1}`}
+                  </span>
                 </p>
               </div>
             </div>
@@ -587,7 +597,7 @@ export default function PayerDetailPage() {
             {payer.notes && (
               <div className="col-span-1 md:col-span-2">
                 <h3 className="text-sm font-medium text-accent mb-2">Примечания</h3>
-                <p className="text-dark bg-light-dark/30 p-3 rounded-lg break-words">{payer.notes}</p>
+                <p className="text-dark bg-light-dark p-3 rounded-lg break-words">{payer.notes}</p>
               </div>
             )}
           </div>
@@ -615,7 +625,7 @@ export default function PayerDetailPage() {
 
         {/* Payment Form */}
         {showPaymentForm && (
-          <div className="mb-6 p-4 bg-light-dark/30 rounded-lg animate-slide-in">
+          <div className="mb-6 p-4 bg-light-dark rounded-lg animate-slide-in">
             <h3 className="font-medium text-dark mb-3">Новый платёж</h3>
 
             {/* Quick-fill buttons from PaymentSettings */}
@@ -742,7 +752,7 @@ export default function PayerDetailPage() {
             {payments.map((payment) => (
               <div
                 key={payment.id}
-                className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 gap-2 bg-light-dark/30 rounded-lg transition-all duration-150 hover:bg-light-dark/50"
+                className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 gap-2 bg-light-dark rounded-lg transition-all duration-150 hover:bg-light-dark"
               >
                 <div className="flex items-center gap-3 flex-wrap">
                   <div className="text-lg font-bold text-primary">

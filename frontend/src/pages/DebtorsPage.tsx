@@ -135,7 +135,7 @@ export default function DebtorsPage() {
                       </td>
                       <td className="py-3 px-4 text-accent">
                         {getFacultyName(debtor.faculty_id)}
-                        {debtor.group_name && ` / ${debtor.group_name}`}
+                        {(debtor.group_code || debtor.group_name) && ` / ${debtor.group_code || debtor.group_name}`}
                       </td>
                       <td className="py-3 px-4">
                         <StatusBadge status={debtor.status} />
@@ -165,7 +165,7 @@ export default function DebtorsPage() {
                       </Link>
                       <p className="text-xs text-accent mt-0.5">
                         {getFacultyName(debtor.faculty_id)}
-                        {debtor.group_name && ` / ${debtor.group_name}`}
+                        {(debtor.group_code || debtor.group_name) && ` / ${debtor.group_code || debtor.group_name}`}
                         {debtor.course && ` • ${debtor.course} курс`}
                       </p>
                     </div>

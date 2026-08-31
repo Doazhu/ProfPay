@@ -1,90 +1,82 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+
+  // Сброс Tailwind выключен: его правило для <button> перебивает фон кнопок
+  // Radix Themes, и они рисуются прозрачными (об этом прямо сказано
+  // в документации Radix). Сброс даёт сама Radix Themes.
+  corePlugins: { preflight: false },
+
   theme: {
     extend: {
+      /*
+        Палитра указывает на токены Radix Themes, а не на конкретные цвета.
+        Так все старые классы вида `bg-light` и `text-dark`, которых в разметке
+        сотни, начинают следовать выбранной теме: Radix подменяет значения
+        переменных при переключении светлого и тёмного вида, а правила Tailwind
+        остаются прежними.
+
+        Прозрачность через дробь (`bg-light/60`) с такими цветами не работает —
+        для полупрозрачных фонов есть отдельные alpha-токены Radix (`--gray-a3`),
+        они вынесены ниже как `*-a`.
+      */
       colors: {
-        // Custom color palette
-        'primary': {
-          DEFAULT: '#1F9788',
-          light: '#2ab8a6',
-          dark: '#177a6d',
-          50: '#eefaf8',
-          100: '#d5f2ee',
+        primary: {
+          DEFAULT: 'var(--accent-9)',
+          dark:    'var(--accent-10)',
+          light:   'var(--accent-8)',
+          50:      'var(--accent-2)',
+          100:     'var(--accent-3)',
         },
-        'secondary': {
-          DEFAULT: '#5852ED',
-          light: '#7a75f1',
-          dark: '#4540c9',
-          50: '#eeeeff',
-          100: '#dddcfe',
+        accent: {
+          DEFAULT: 'var(--gray-11)',
+          light:   'var(--gray-10)',
+          dark:    'var(--gray-12)',
         },
-        'accent': {
-          DEFAULT: '#556084',
-          light: '#6b7a9e',
-          dark: '#3f4863',
+        dark: {
+          DEFAULT: 'var(--gray-12)',
+          light:   'var(--gray-11)',
         },
-        'dark': {
-          DEFAULT: '#1D1A29',
-          light: '#2a2640',
-          lighter: '#3d3858',
+        light: {
+          DEFAULT: 'var(--color-background)',
+          dark:    'var(--gray-a3)',
+          darker:  'var(--gray-a6)',
         },
-        'light': {
-          DEFAULT: '#F0F2F5',
-          dark: '#E2E5EA',
-          darker: '#CDD2D9',
+        panel:  'var(--color-panel-solid)',
+        surface:'var(--color-surface)',
+        line:   'var(--gray-a5)',
+        state: {
+          paid:   'var(--jade-11)',
+          unpaid: 'var(--red-11)',
+          part:   'var(--amber-11)',
+          arch:   'var(--gray-10)',
         },
       },
+
       fontFamily: {
-        sans: ['Rubik', 'system-ui', '-apple-system', 'sans-serif'],
-        heading: ['JetBrains Mono', 'monospace'],
-        mono: ['JetBrains Mono', 'monospace'],
+        // Шрифты задаёт Radix Themes своей переменной; внешних CDN нет,
+        // поэтому Content-Security-Policy остаётся с font-src 'self'.
+        sans: ['var(--default-font-family)'],
+        mono: ['var(--code-font-family)'],
       },
+
       borderRadius: {
-        '2xl': '1rem',
-        '3xl': '1.25rem',
+        DEFAULT: 'var(--radius-2)',
+        md: 'var(--radius-2)',
+        lg: 'var(--radius-3)',
+        xl: 'var(--radius-4)',
+        '2xl': 'var(--radius-5)',
+        '3xl': 'var(--radius-6)',
       },
+
       boxShadow: {
-        'soft': '0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04)',
-        'soft-md': '0 2px 8px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.06)',
-        'soft-lg': '0 4px 12px rgba(0,0,0,0.08), 0 12px 32px rgba(0,0,0,0.08)',
-        'glow-primary': '0 4px 20px rgba(31,151,136,0.15)',
-        'glow-secondary': '0 4px 20px rgba(88,82,237,0.15)',
+        soft: 'var(--shadow-2)',
+        'soft-md': 'var(--shadow-3)',
+        'soft-lg': 'var(--shadow-4)',
       },
-      // Animation timing functions
-      transitionTimingFunction: {
-        'out-expo': 'cubic-bezier(0.16, 1, 0.3, 1)',
-        'spring': 'cubic-bezier(0.34, 1.56, 0.64, 1)',
-      },
-      // Custom keyframe animations
-      keyframes: {
-        'fade-in': {
-          '0%': { opacity: '0', transform: 'translateY(4px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
-        },
-        'fade-in-up': {
-          '0%': { opacity: '0', transform: 'translateY(8px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
-        },
-        'scale-in': {
-          '0%': { opacity: '0', transform: 'scale(0.95)' },
-          '100%': { opacity: '1', transform: 'scale(1)' },
-        },
-        'slide-in-right': {
-          '0%': { opacity: '0', transform: 'translateX(-8px)' },
-          '100%': { opacity: '1', transform: 'translateX(0)' },
-        },
-      },
-      animation: {
-        'fade-in': 'fade-in 300ms ease-out',
-        'fade-in-fast': 'fade-in 150ms ease-out',
-        'fade-in-up': 'fade-in-up 400ms ease-out',
-        'scale-in': 'scale-in 200ms ease-out',
-        'slide-in-right': 'slide-in-right 200ms ease-out',
-      },
+
+      keyframes: { 'fade-in': { '0%': { opacity: '0' }, '100%': { opacity: '1' } } },
+      animation: { 'fade-in': 'fade-in 120ms ease-out' },
     },
   },
   plugins: [],

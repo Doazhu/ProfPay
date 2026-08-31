@@ -1,633 +1,438 @@
-import { useState, useEffect, useMemo, FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
-import type { Faculty, PayerCreate, BudgetSettings, PaymentSettings } from '../types';
-import { payerApi, paymentApi, facultyApi, budgetSettingsApi, paymentSettingsApi, extractErrorMessage } from '../services/api';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { GearIcon, InfoCircledIcon } from '@radix-ui/react-icons';
+import {
+  Badge, Box, Button, Callout, Card, Checkbox, Flex, Grid, Heading, Link,
+  Select, Separator, Text, TextArea, TextField,
+} from '@radix-ui/themes';
 
-/** Возвращает текущий учебный год в формате "2025-2026" */
-function getCurrentAcademicYear(): string {
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
-  return month >= 9 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
-}
+import type {
+  DataEntryContext, EducationLevel, Faculty, GroupHint, PayerCreate,
+} from '../types';
+import { EDUCATION_LEVELS } from '../types';
+import {
+  dataEntryApi, extractErrorMessage, facultyApi, payerApi, paymentApi,
+} from '../services/api';
+import GroupInput, {
+  admissionYearFromCourse, buildGroupName, courseFromAdmissionYear, formatAcademicYear,
+  type GroupValue,
+} from '../components/GroupInput';
 
-/** Пытается извлечь курс из кода группы вида "1-мд-35" */
-function parseCourseFromGroup(groupCode: string): number | undefined {
-  const match = groupCode.trim().match(/^(\d)/);
-  if (match) {
-    const c = parseInt(match[1]);
-    if (c >= 1 && c <= 6) return c;
-  }
-  return undefined;
+const money = (amount: number) =>
+  new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 })
+    .format(amount);
+
+/** Подпись поля — Radix не даёт готовой пары «подпись + поле». */
+function Field({ label, children, hint }: {
+  label: string; children: React.ReactNode; hint?: React.ReactNode;
+}) {
+  return (
+    <Box>
+      <Text as="label" size="1" weight="medium" color="gray" mb="1" style={{ display: 'block' }}>
+        {label}
+      </Text>
+      {children}
+      {hint && <Box mt="1">{hint}</Box>}
+    </Box>
+  );
 }
 
 export default function AddPayerPage() {
   const navigate = useNavigate();
 
   const [faculties, setFaculties] = useState<Faculty[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [context, setContext] = useState<DataEntryContext | null>(null);
+  const [hints, setHints] = useState<GroupHint[]>([]);
   const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Budget defaults
-  const [budgetDefaults, setBudgetDefaults] = useState<BudgetSettings>({
-    default_budget_percent: '1',
-    default_stipend_amount: '',
+  // ФИО и контакты
+  const [lastName, setLastName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [middleName, setMiddleName] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [notes, setNotes] = useState('');
+
+  // Обучение
+  const [facultyId, setFacultyId] = useState('');
+  const [department, setDepartment] = useState('');
+  const [group, setGroup] = useState<GroupValue>({
+    course: 1,
+    letters: '',
+    number: '',
+    admissionYear: admissionYearFromCourse(1),
+    level: 'bachelor',
   });
+  const [yearTouched, setYearTouched] = useState(false);
+  const [hintApplied, setHintApplied] = useState<string | null>(null);
 
-  // Budget calculator state
+  // Бюджетник
   const [isBudget, setIsBudget] = useState(false);
-  const [stipendAmount, setStipendAmount] = useState('');
-  const [budgetPercent, setBudgetPercent] = useState('');
+  const [stipend, setStipend] = useState('');
+  const [budgetPercent, setBudgetPercent] = useState('1');
 
-  const budgetPayment = useMemo(() => {
-    const s = parseFloat(stipendAmount);
-    const p = parseFloat(budgetPercent);
-    if (!isNaN(s) && !isNaN(p) && s > 0 && p > 0) {
-      return Math.round(s * p) / 100;
-    }
-    return 0;
-  }, [stipendAmount, budgetPercent]);
-
-  // Payment settings
-  const [allPaymentSettings, setAllPaymentSettings] = useState<PaymentSettings[]>([]);
-
-  // Payment with creation
+  // Платёж вместе с созданием
   const [addPayment, setAddPayment] = useState(true);
-  const [paymentData, setPaymentData] = useState({
-    amount: '',
-    payment_date: new Date().toISOString().split('T')[0],
-    academic_year: getCurrentAcademicYear(),
-    semester: '' as 'fall' | 'spring' | '',
-    payment_method: '',
-    notes: '',
-  });
-
-  // Academic year options
-  const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth() + 1;
-  const baseYear = currentMonth >= 9 ? currentYear : currentYear - 1;
-  const yearOptions = Array.from({ length: 5 }, (_, i) => {
-    const y = baseYear - 2 + i;
-    return `${y}-${y + 1}`;
-  });
-
-  // Find payment settings for selected year
-  const activeSettings = useMemo(() => {
-    return allPaymentSettings.find(
-      (s) => s.academic_year === paymentData.academic_year && s.is_active
-    ) || null;
-  }, [allPaymentSettings, paymentData.academic_year]);
-
-  const formatMoney = (amount: number) =>
-    new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 }).format(amount);
-
-  // Form state
-  const [formData, setFormData] = useState<PayerCreate>({
-    last_name: '',
-    first_name: '',
-    middle_name: '',
-    date_of_birth: '',
-    email: '',
-    phone: '',
-    telegram: '',
-    vk: '',
-    faculty_id: undefined,
-    group_name: '',
-    course: undefined,
-    department: '',
-    status: 'unpaid',
-    notes: '',
-  });
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
+  const [semester, setSemester] = useState<'fall' | 'spring'>(
+    new Date().getMonth() + 1 >= 9 ? 'fall' : 'spring',
+  );
 
   useEffect(() => {
-    loadFaculties();
-    loadBudgetDefaults();
-    loadPaymentSettings();
+    facultyApi.getAll().then(setFaculties).catch(() => setFaculties([]));
+
+    dataEntryApi.getContext()
+      .then((data) => {
+        setContext(data);
+        setBudgetPercent(data.default_budget_percent || '1');
+        if (data.default_stipend_amount) setStipend(data.default_stipend_amount);
+        // Сумма по умолчанию — взнос за текущий семестр из настроек.
+        const forSemester = new Date().getMonth() + 1 >= 9 ? data.fall_amount : data.spring_amount;
+        if (forSemester) setPaymentAmount(String(forSemester));
+      })
+      .catch(() => setContext(null));
   }, []);
 
-  // Auto-extract course when group_name changes
+  // Подсказки по группам зависят от выбранного деректората.
   useEffect(() => {
-    if (formData.group_name && !formData.course) {
-      const c = parseCourseFromGroup(formData.group_name);
-      if (c) setFormData(prev => ({ ...prev, course: c }));
+    dataEntryApi.getGroupHints(facultyId ? Number(facultyId) : undefined)
+      .then(setHints)
+      .catch(() => setHints([]));
+  }, [facultyId]);
+
+  const groupName = buildGroupName(group);
+
+  /**
+   * Ранее заведённая такая же группа.
+   *
+   * Курс в сравнении не участвует: «1-мд-35» и «3-мд-35» — одна и та же
+   * группа на разных курсах, кафедра у них общая.
+   */
+  const matchedHint = useMemo(() => {
+    if (!group.letters || !group.number) return null;
+    const suffix = `${group.letters.trim()}-${group.number.trim()}`.toLowerCase();
+    return hints.find((hint) => {
+      const hintSuffix = hint.group_name.split('-').slice(1).join('-').toLowerCase();
+      return hintSuffix === suffix && (!facultyId || hint.faculty_id === Number(facultyId));
+    }) ?? null;
+  }, [hints, group.letters, group.number, facultyId]);
+
+  // Кафедра и уровень подставляются из найденной группы, но не затирают
+  // то, что уже набрали руками.
+  useEffect(() => {
+    if (!matchedHint || hintApplied === matchedHint.group_name || department.trim()) return;
+    if (matchedHint.department) setDepartment(matchedHint.department);
+    if (matchedHint.education_level) {
+      setGroup((prev) => ({ ...prev, level: matchedHint.education_level }));
     }
-  }, [formData.group_name]);
+    setHintApplied(matchedHint.group_name);
+  }, [matchedHint, department, hintApplied]);
 
-  const loadFaculties = async () => {
-    try {
-      const data = await facultyApi.getAll();
-      setFaculties(data);
-    } catch (error) {
-      console.error('Failed to load faculties:', error);
-    }
-  };
+  const budgetPayment = useMemo(() => {
+    const s = parseFloat(stipend);
+    const p = parseFloat(budgetPercent);
+    return !isNaN(s) && !isNaN(p) && s > 0 && p > 0 ? Math.round(s * p) / 100 : 0;
+  }, [stipend, budgetPercent]);
 
-  const loadPaymentSettings = async () => {
-    try {
-      const data = await paymentSettingsApi.getAll();
-      setAllPaymentSettings(data);
-    } catch (error) {
-      console.error('Failed to load payment settings:', error);
-    }
-  };
+  const knownDepartments = useMemo(
+    () => [...new Set(hints.map((h) => h.department).filter(Boolean))] as string[],
+    [hints],
+  );
 
-  const loadBudgetDefaults = async () => {
-    try {
-      const data = await budgetSettingsApi.get();
-      setBudgetDefaults(data);
-      setBudgetPercent(data.default_budget_percent || '1');
-      if (data.default_stipend_amount) {
-        setStipendAmount(data.default_stipend_amount);
-      }
-    } catch (error) {
-      console.error('Failed to load budget defaults:', error);
-    }
-  };
+  const canSubmit = Boolean(lastName.trim() && firstName.trim()) && !isSaving;
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value === '' ? undefined : value,
-    }));
-  };
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
     setError('');
-    setIsLoading(true);
+    setIsSaving(true);
+
+    const payload: PayerCreate = {
+      last_name: lastName.trim(),
+      first_name: firstName.trim(),
+      middle_name: middleName.trim() || undefined,
+      date_of_birth: birthDate || undefined,
+      email: email.trim() || undefined,
+      phone: phone.trim() || undefined,
+      faculty_id: facultyId ? Number(facultyId) : undefined,
+      group_name: groupName || undefined,
+      department: department.trim() || undefined,
+      admission_year: group.admissionYear,
+      education_level: group.level,
+      is_budget: isBudget,
+      stipend_amount: isBudget && stipend ? Number(stipend) : undefined,
+      budget_percent: isBudget && budgetPercent ? Number(budgetPercent) : undefined,
+      notes: notes.trim() || undefined,
+      status: 'unpaid',
+    };
 
     try {
-      const payer = await payerApi.create({
-        ...formData,
-        date_of_birth: formData.date_of_birth || undefined,
-        is_budget: isBudget,
-        stipend_amount: isBudget && stipendAmount ? Number(stipendAmount) : undefined,
-        budget_percent: isBudget && budgetPercent ? Number(budgetPercent) : undefined,
-        email: formData.email || undefined,
-        phone: formData.phone || undefined,
-        telegram: formData.telegram || undefined,
-        vk: formData.vk || undefined,
-        middle_name: formData.middle_name || undefined,
-        faculty_id: formData.faculty_id ? Number(formData.faculty_id) : undefined,
-        group_name: formData.group_name || undefined,
-        course: formData.course ? Number(formData.course) : undefined,
-        department: formData.department || undefined,
-      });
+      const payer = await payerApi.create(payload);
 
-      // Create payment if filled
-      if (addPayment && paymentData.amount) {
+      if (addPayment && paymentAmount) {
         try {
           await paymentApi.create({
             payer_id: payer.id,
-            amount: Number(paymentData.amount),
-            payment_date: paymentData.payment_date,
-            academic_year: paymentData.academic_year || undefined,
-            semester: paymentData.semester || undefined,
-            payment_method: paymentData.payment_method || undefined,
-            notes: paymentData.notes || undefined,
+            amount: Number(paymentAmount),
+            payment_date: paymentDate,
+            academic_year: context?.academic_year,
+            semester,
           });
-        } catch (payErr) {
-          console.error('Payment creation failed:', payErr);
+        } catch (paymentError) {
+          // Плательщик уже создан — платёж можно довнести в карточке.
+          console.error('Платёж не создан:', paymentError);
         }
       }
 
       navigate(`/payers/${payer.id}`);
-    } catch (err: unknown) {
-      setError(extractErrorMessage(err, 'Ошибка при создании плательщика'));
+    } catch (err) {
+      setError(extractErrorMessage(err, 'Не удалось создать плательщика'));
     } finally {
-      setIsLoading(false);
+      setIsSaving(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto animate-fade-in">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-dark">Добавить плательщика</h1>
-        <p className="text-accent mt-1">Регистрация нового члена профсоюза — СПБГУПТД</p>
-      </div>
+    <Box className="animate-fade-in" style={{ maxWidth: 860 }}>
+      <Heading size="6" mb="1">Добавить плательщика</Heading>
+      <Text as="p" size="2" color="gray" mb="4">
+        Регистрация нового члена профсоюза — СПбГУПТД
+      </Text>
 
-      {/* Form */}
-      <form onSubmit={handleSubmit} className="card">
-        {error && (
-          <div className="mb-6 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm animate-scale-in">
-            {error}
-          </div>
-        )}
+      {/*
+        Связь с настройками системы. Раньше настройки жили сами по себе,
+        и по форме ввода было не понять, что именно из них применяется.
+      */}
+      {context && (
+        <Callout.Root mb="4" variant="surface"
+                      color={context.has_payment_settings ? 'gray' : 'amber'}>
+          <Callout.Icon>
+            {context.has_payment_settings ? <InfoCircledIcon /> : <GearIcon />}
+          </Callout.Icon>
+          <Callout.Text>
+            {context.has_payment_settings ? (
+              <>
+                Учебный год <Text weight="medium">{context.academic_year}</Text>: взнос{' '}
+                {money(Number(context.fall_amount))} за семестр,{' '}
+                {money(Number(context.year_total))} за год. Бюджетникам —{' '}
+                {context.default_budget_percent}% от стипендии.{' '}
+                <Link asChild><RouterLink to="/settings">Изменить в настройках</RouterLink></Link>
+              </>
+            ) : (
+              <>
+                Суммы взносов на {context.academic_year} не заданы, поэтому статус
+                «частично оплачено» выставляться не будет.{' '}
+                <Link asChild><RouterLink to="/settings">Задать суммы</RouterLink></Link>
+              </>
+            )}
+          </Callout.Text>
+        </Callout.Root>
+      )}
 
-        {/* Personal Info */}
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold text-dark mb-4">Личные данные</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-accent mb-1">Фамилия *</label>
-              <input
-                type="text"
-                name="last_name"
-                value={formData.last_name}
-                onChange={handleChange}
-                className="input"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-accent mb-1">Имя *</label>
-              <input
-                type="text"
-                name="first_name"
-                value={formData.first_name}
-                onChange={handleChange}
-                className="input"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-accent mb-1">Отчество</label>
-              <input
-                type="text"
-                name="middle_name"
-                value={formData.middle_name || ''}
-                onChange={handleChange}
-                className="input"
-              />
-            </div>
-          </div>
-          <div className="mt-4" style={{ maxWidth: '220px' }}>
-            <label className="block text-sm font-medium text-accent mb-1">Дата рождения</label>
-            <input
-              type="date"
-              name="date_of_birth"
-              value={formData.date_of_birth || ''}
-              onChange={handleChange}
-              className="input"
-            />
-          </div>
-        </div>
+      {error && (
+        <Callout.Root color="red" mb="4">
+          <Callout.Text>{error}</Callout.Text>
+        </Callout.Root>
+      )}
 
-        {/* Contact Info */}
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold text-dark mb-4">Контактные данные</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-accent mb-1">Email</label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email || ''}
-                onChange={handleChange}
-                className="input"
-                placeholder="student@spbguptd.ru"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-accent mb-1">Телефон</label>
-              <input
-                type="tel"
-                name="phone"
-                value={formData.phone || ''}
-                onChange={handleChange}
-                className="input"
-                placeholder="+7 (999) 123-45-67"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-accent mb-1">Telegram</label>
-              <input
-                type="text"
-                name="telegram"
-                value={formData.telegram || ''}
-                onChange={handleChange}
-                className="input"
-                placeholder="@username"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-accent mb-1">VK</label>
-              <input
-                type="text"
-                name="vk"
-                value={formData.vk || ''}
-                onChange={handleChange}
-                className="input"
-                placeholder="vk.com/username"
-              />
-            </div>
-          </div>
-        </div>
+      <form onSubmit={handleSubmit}>
+        <Flex direction="column" gap="4">
 
-        {/* University Info */}
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold text-dark mb-4">Данные обучения</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Деректорат (бывший факультет) */}
-            <div>
-              <label className="block text-sm font-medium text-accent mb-1">Деректорат *</label>
-              <select
-                name="faculty_id"
-                value={formData.faculty_id || ''}
-                onChange={handleChange}
-                className="input"
-                required
+          <Card size="2">
+            <Heading size="3" mb="3">Личные данные</Heading>
+            <Grid columns={{ initial: '1', sm: '3' }} gap="3">
+              <Field label="Фамилия *">
+                <TextField.Root value={lastName} onChange={(e) => setLastName(e.target.value)}
+                                placeholder="Ренёв" required autoFocus />
+              </Field>
+              <Field label="Имя *">
+                <TextField.Root value={firstName} onChange={(e) => setFirstName(e.target.value)}
+                                placeholder="Александр" required />
+              </Field>
+              <Field label="Отчество">
+                <TextField.Root value={middleName} onChange={(e) => setMiddleName(e.target.value)}
+                                placeholder="Дмитриевич" />
+              </Field>
+            </Grid>
+
+            <Grid columns={{ initial: '1', sm: '3' }} gap="3" mt="3">
+              <Field label="Дата рождения">
+                <TextField.Root type="date" value={birthDate}
+                                onChange={(e) => setBirthDate(e.target.value)} />
+              </Field>
+              <Field label="Email">
+                <TextField.Root type="email" value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="me@example.com" />
+              </Field>
+              <Field label="Телефон">
+                <TextField.Root value={phone} onChange={(e) => setPhone(e.target.value)}
+                                placeholder="+7 900 123-45-67" />
+              </Field>
+            </Grid>
+          </Card>
+
+          <Card size="2">
+            <Heading size="3" mb="1">Обучение</Heading>
+            <Text as="p" size="1" color="gray" mb="3">
+              Деректорат и уровень образования определяют остальное: сколько курсов
+              возможно, когда человек уйдёт в архив и какая кафедра подставится.
+            </Text>
+
+            <Grid columns={{ initial: '1', sm: '2' }} gap="3" mb="3">
+              <Field
+                label="Деректорат"
+                hint={context && context.faculties_count === 0 ? (
+                  <Text size="1" color="amber">
+                    Деректоратов пока нет.{' '}
+                    <Link asChild><RouterLink to="/settings">Добавить</RouterLink></Link>
+                  </Text>
+                ) : undefined}
               >
-                <option value="">Не указан</option>
-                {faculties.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.short_name ? `${f.short_name} — ${f.name}` : f.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+                <Select.Root value={facultyId || 'none'}
+                             onValueChange={(v) => setFacultyId(v === 'none' ? '' : v)}>
+                  <Select.Trigger placeholder="Выберите" style={{ width: '100%' }} />
+                  <Select.Content>
+                    <Select.Item value="none">Не указан</Select.Item>
+                    {faculties.map((faculty) => (
+                      <Select.Item key={faculty.id} value={String(faculty.id)}>
+                        {faculty.short_name ? `${faculty.short_name} — ${faculty.name}` : faculty.name}
+                      </Select.Item>
+                    ))}
+                  </Select.Content>
+                </Select.Root>
+              </Field>
 
-            {/* Кафедра (опционально) */}
-            <div>
-              <label className="block text-sm font-medium text-accent mb-1">
-                Кафедра <span className="text-accent/60 font-normal">(необязательно)</span>
-              </label>
-              <input
-                type="text"
-                name="department"
-                value={formData.department || ''}
-                onChange={handleChange}
-                className="input"
-                placeholder="Например: ЦИАТ"
-              />
-            </div>
+              <Field label="Уровень образования">
+                <Select.Root value={group.level}
+                             onValueChange={(v) => setGroup({ ...group, level: v as EducationLevel })}>
+                  <Select.Trigger style={{ width: '100%' }} />
+                  <Select.Content>
+                    {EDUCATION_LEVELS.map((level) => (
+                      <Select.Item key={level.value} value={level.value}>
+                        {level.label} — {level.years} г.
+                      </Select.Item>
+                    ))}
+                  </Select.Content>
+                </Select.Root>
+              </Field>
+            </Grid>
 
-            {/* Группа — свободный ввод */}
-            <div>
-              <label className="block text-sm font-medium text-accent mb-1">
-                Группа *
-                <span className="text-xs text-accent/60 ml-1 font-normal">(формат: 1-мд-35)</span>
-              </label>
-              <input
-                type="text"
-                name="group_name"
-                value={formData.group_name || ''}
-                onChange={handleChange}
-                className="input"
-                placeholder="Например: 1-мд-35"
-                required
-              />
-              <p className="text-xs text-accent/70 mt-1">Курс определяется автоматически из кода группы</p>
-            </div>
+            <Separator size="4" my="3" />
 
-            {/* Курс */}
-            <div>
-              <label className="block text-sm font-medium text-accent mb-1">Курс</label>
-              <input
-                type="number"
-                name="course"
-                value={formData.course || ''}
-                onChange={handleChange}
-                className="input"
-                placeholder="1–6"
-                min="1"
-                max="6"
-              />
-            </div>
-
-            {/* Статус оплаты — только 2 варианта */}
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-accent mb-2">Статус оплаты</label>
-              <div className="flex gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="status"
-                    value="unpaid"
-                    checked={formData.status === 'unpaid'}
-                    onChange={handleChange}
-                    className="w-4 h-4 text-red-600"
-                  />
-                  <span className="text-dark">Не оплачено</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="status"
-                    value="paid"
-                    checked={formData.status === 'paid'}
-                    onChange={handleChange}
-                    className="w-4 h-4 text-green-600"
-                  />
-                  <span className="text-dark">Оплачено</span>
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Budget Student */}
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold text-dark mb-4">Форма обучения</h2>
-          <label className="flex items-center gap-3 cursor-pointer mb-4">
-            <input
-              type="checkbox"
-              checked={isBudget}
-              onChange={(e) => setIsBudget(e.target.checked)}
-              className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+            <GroupInput
+              value={group}
+              onChange={setGroup}
+              yearTouched={yearTouched}
+              onYearTouchedChange={setYearTouched}
             />
-            <span className="text-dark font-medium">Бюджетник</span>
-            <span className="text-accent text-sm">(учится на бюджетной основе)</span>
-          </label>
 
-          {isBudget && (
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg animate-fade-in">
-              <p className="text-sm text-blue-800 mb-3">
-                Бюджетник платит процент от стипендии. Укажите данные или используйте шаблонные значения.
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-accent mb-1">Стипендия</label>
-                  <input
-                    type="number"
-                    value={stipendAmount}
-                    onChange={(e) => setStipendAmount(e.target.value)}
-                    className="input"
-                    placeholder={budgetDefaults.default_stipend_amount || '0'}
-                    min="0"
-                    step="0.01"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-accent mb-1">Процент (%)</label>
-                  <input
-                    type="number"
-                    value={budgetPercent}
-                    onChange={(e) => setBudgetPercent(e.target.value)}
-                    className="input"
-                    placeholder={budgetDefaults.default_budget_percent || '1'}
-                    min="0"
-                    max="100"
-                    step="0.01"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-accent mb-1">К оплате</label>
-                  <div className="input bg-white flex items-center">
-                    <span className={`font-bold text-lg ${budgetPayment > 0 ? 'text-primary' : 'text-accent'}`}>
-                      {budgetPayment > 0
-                        ? new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 2 }).format(budgetPayment)
-                        : '—'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              {budgetDefaults.default_stipend_amount && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStipendAmount(budgetDefaults.default_stipend_amount);
-                    setBudgetPercent(budgetDefaults.default_budget_percent);
-                  }}
-                  className="mt-3 text-sm text-blue-700 hover:text-blue-900 underline"
-                >
-                  Заполнить шаблонными значениями (стипендия: {budgetDefaults.default_stipend_amount} / процент: {budgetDefaults.default_budget_percent}%)
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+            <Box mt="3" style={{ maxWidth: 340 }}>
+              <Field
+                label="Кафедра"
+                hint={matchedHint?.department ? (
+                  <Text size="1" color="gray">
+                    Подставлена из группы{' '}
+                    <Badge variant="soft" size="1">{matchedHint.group_name}</Badge>
+                    {' '}— в ней уже {matchedHint.count} чел.
+                  </Text>
+                ) : undefined}
+              >
+                <TextField.Root value={department} onChange={(e) => setDepartment(e.target.value)}
+                                placeholder="ЦИАТ" list="known-departments" />
+                <datalist id="known-departments">
+                  {knownDepartments.map((dep) => <option key={dep} value={dep} />)}
+                </datalist>
+              </Field>
+            </Box>
+          </Card>
 
-        {/* Payment */}
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold text-dark mb-4">Оплата</h2>
-          <label className="flex items-center gap-3 cursor-pointer mb-4">
-            <input
-              type="checkbox"
-              checked={addPayment}
-              onChange={(e) => setAddPayment(e.target.checked)}
-              className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
-            />
-            <span className="text-dark font-medium">Внести оплату сразу</span>
-          </label>
+          <Card size="2">
+            <Flex align="center" gap="2" mb={isBudget ? '3' : '0'}>
+              <Checkbox id="budget" checked={isBudget}
+                        onCheckedChange={(v) => setIsBudget(v === true)} />
+              <Text as="label" size="2" htmlFor="budget">
+                Бюджетник — взнос считается от стипендии
+              </Text>
+            </Flex>
 
-          {addPayment && (
-            <div className="p-4 bg-green-50 border border-green-200 rounded-lg animate-fade-in">
-              {/* Quick-fill from settings */}
-              {activeSettings && (
-                <div className="mb-4">
-                  <p className="text-xs text-green-700 mb-2">
-                    Шаблон ({activeSettings.academic_year}):
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <button type="button" onClick={() => setPaymentData({
-                      ...paymentData, semester: 'fall', amount: String(activeSettings.fall_amount),
-                    })} className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-                      paymentData.semester === 'fall' && paymentData.amount === String(activeSettings.fall_amount)
-                        ? 'bg-green-600 text-white border-green-600'
-                        : 'bg-white text-green-700 border-green-300 hover:bg-green-100'
-                    }`}>
-                      Осенний — {formatMoney(activeSettings.fall_amount)}
-                    </button>
-                    <button type="button" onClick={() => setPaymentData({
-                      ...paymentData, semester: 'spring', amount: String(activeSettings.spring_amount),
-                    })} className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-                      paymentData.semester === 'spring' && paymentData.amount === String(activeSettings.spring_amount)
-                        ? 'bg-green-600 text-white border-green-600'
-                        : 'bg-white text-green-700 border-green-300 hover:bg-green-100'
-                    }`}>
-                      Весенний — {formatMoney(activeSettings.spring_amount)}
-                    </button>
-                    <button type="button" onClick={() => setPaymentData({
-                      ...paymentData, semester: '', amount: String(activeSettings.total_year_amount), notes: 'Оплата за год',
-                    })} className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-                      paymentData.amount === String(activeSettings.total_year_amount)
-                        ? 'bg-green-600 text-white border-green-600'
-                        : 'bg-white text-green-700 border-green-300 hover:bg-green-100'
-                    }`}>
-                      Год — {formatMoney(activeSettings.total_year_amount)}
-                    </button>
-                  </div>
-                </div>
-              )}
+            {isBudget && (
+              <Grid columns={{ initial: '1', sm: '3' }} gap="3">
+                <Field label="Стипендия, ₽">
+                  <TextField.Root value={stipend} onChange={(e) => setStipend(e.target.value)}
+                                  inputMode="decimal" placeholder="2500" />
+                </Field>
+                <Field label="Процент">
+                  <TextField.Root value={budgetPercent} onChange={(e) => setBudgetPercent(e.target.value)}
+                                  inputMode="decimal" placeholder="1" />
+                </Field>
+                <Box>
+                  <Text as="div" size="1" weight="medium" color="gray" mb="1">К оплате</Text>
+                  <Text as="div" size="5" weight="bold">
+                    {budgetPayment > 0 ? money(budgetPayment) : '—'}
+                  </Text>
+                </Box>
+              </Grid>
+            )}
+          </Card>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm text-accent mb-1">Учебный год</label>
-                  <select value={paymentData.academic_year}
-                    onChange={(e) => setPaymentData({ ...paymentData, academic_year: e.target.value })}
-                    className="input">
-                    <option value="">Не указан</option>
-                    {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-accent mb-1">Семестр</label>
-                  <select value={paymentData.semester}
-                    onChange={(e) => {
-                      const sem = e.target.value as 'fall' | 'spring' | '';
-                      const upd = { ...paymentData, semester: sem };
-                      if (sem && activeSettings && !paymentData.amount) {
-                        upd.amount = String(sem === 'fall' ? activeSettings.fall_amount : activeSettings.spring_amount);
-                      }
-                      setPaymentData(upd);
-                    }}
-                    className="input">
-                    <option value="">Не указан</option>
-                    <option value="fall">Осенний</option>
-                    <option value="spring">Весенний</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-accent mb-1">Сумма *</label>
-                  <input type="number" value={paymentData.amount}
-                    onChange={(e) => setPaymentData({ ...paymentData, amount: e.target.value })}
-                    placeholder="0" className="input" min="0" required />
-                </div>
-                <div>
-                  <label className="block text-sm text-accent mb-1">Дата платежа</label>
-                  <input type="date" value={paymentData.payment_date}
-                    onChange={(e) => setPaymentData({ ...paymentData, payment_date: e.target.value })}
-                    className="input" />
-                </div>
-                <div>
-                  <label className="block text-sm text-accent mb-1">Способ оплаты</label>
-                  <select value={paymentData.payment_method}
-                    onChange={(e) => setPaymentData({ ...paymentData, payment_method: e.target.value })}
-                    className="input">
-                    <option value="">Не указан</option>
-                    <option value="cash">Наличные</option>
-                    <option value="card">Карта</option>
-                    <option value="transfer">Перевод</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-accent mb-1">Примечание</label>
-                  <input type="text" value={paymentData.notes}
-                    onChange={(e) => setPaymentData({ ...paymentData, notes: e.target.value })}
-                    className="input" placeholder="Примечание..." />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+          <Card size="2">
+            <Flex align="center" gap="2" mb={addPayment ? '3' : '0'}>
+              <Checkbox id="pay" checked={addPayment}
+                        onCheckedChange={(v) => setAddPayment(v === true)} />
+              <Text as="label" size="2" htmlFor="pay">Сразу внести платёж</Text>
+            </Flex>
 
-        {/* Notes */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-accent mb-1">Примечания</label>
-          <textarea
-            name="notes"
-            value={formData.notes || ''}
-            onChange={handleChange}
-            className="input min-h-[100px]"
-            placeholder="Дополнительная информация..."
-          />
-        </div>
+            {addPayment && (
+              <Grid columns={{ initial: '1', sm: '3' }} gap="3">
+                <Field label="Сумма, ₽">
+                  <TextField.Root value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)}
+                                  inputMode="decimal" placeholder="120" />
+                </Field>
+                <Field label="Дата">
+                  <TextField.Root type="date" value={paymentDate}
+                                  onChange={(e) => setPaymentDate(e.target.value)} />
+                </Field>
+                <Field label="Семестр">
+                  <Select.Root value={semester}
+                               onValueChange={(v) => setSemester(v as 'fall' | 'spring')}>
+                    <Select.Trigger style={{ width: '100%' }} />
+                    <Select.Content>
+                      <Select.Item value="fall">Осенний</Select.Item>
+                      <Select.Item value="spring">Весенний</Select.Item>
+                    </Select.Content>
+                  </Select.Root>
+                </Field>
+              </Grid>
+            )}
+          </Card>
 
-        {/* Actions */}
-        <div className="flex items-center justify-end gap-4 pt-4 border-t border-light-dark">
-          <button type="button" onClick={() => navigate(-1)} className="btn-ghost">
-            Отмена
-          </button>
-          <button type="submit" disabled={isLoading} className="btn-primary disabled:opacity-50">
-            {isLoading ? 'Сохранение...' : 'Сохранить'}
-          </button>
-        </div>
+          <Card size="2">
+            <Field label="Примечание">
+              <TextArea value={notes} onChange={(e) => setNotes(e.target.value)}
+                        placeholder="Необязательно" rows={2} />
+            </Field>
+          </Card>
+
+          <Flex gap="3" justify="end" align="center" wrap="wrap">
+            {groupName && (
+              <Text size="1" color="gray" style={{ marginRight: 'auto' }}>
+                Запишем: <Text weight="medium">{groupName}</Text>, поступление{' '}
+                {formatAcademicYear(group.admissionYear)}, сейчас{' '}
+                {courseFromAdmissionYear(group.admissionYear)} курс
+              </Text>
+            )}
+            <Button type="button" variant="soft" color="gray" onClick={() => navigate('/payers')}>
+              Отмена
+            </Button>
+            <Button type="submit" disabled={!canSubmit}>
+              {isSaving ? 'Сохраняем…' : 'Добавить'}
+            </Button>
+          </Flex>
+        </Flex>
       </form>
-    </div>
+    </Box>
   );
 }

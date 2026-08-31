@@ -1,24 +1,28 @@
-"""
-Domain layer - business entities and repository interfaces.
-"""
+"""Доменный слой: сущности и учебный календарь."""
+from backend.domain.academic import EducationLevel
 from backend.domain.models import (
-    UserRole,
-    PaymentStatus,
-    SystemUser,
+    AppSettings,
+    AuditLog,
     Faculty,
-    StudentGroup,
     Payer,
     Payment,
-    AuditLog,
+    PaymentSettings,
+    PaymentStatus,
+    SemesterType,
+    SystemUser,
+    UserRole,
 )
 
 __all__ = [
-    "UserRole",
-    "PaymentStatus",
-    "SystemUser",
+    "AppSettings",
+    "AuditLog",
+    "EducationLevel",
     "Faculty",
-    "StudentGroup",
     "Payer",
     "Payment",
-    "AuditLog",
+    "PaymentSettings",
+    "PaymentStatus",
+    "SemesterType",
+    "SystemUser",
+    "UserRole",
 ]

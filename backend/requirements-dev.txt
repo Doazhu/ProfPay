@@ -1,0 +1,9 @@
+# Зависимости для разработки и тестов.
+# В образ не попадают: backend/Dockerfile ставит только requirements.txt.
+#
+#   pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+#   PYTHONPATH=. DATABASE_URL=sqlite:///test.db SECRET_KEY=test pytest backend/tests
+
+-r requirements.txt
+
+pytest>=8.0.0

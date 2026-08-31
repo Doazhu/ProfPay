@@ -10,10 +10,26 @@ export interface User {
   is_active: boolean;
   created_at: string;
   last_login: string | null;
+  is_locked: boolean;   // вход заблокирован после серии неудачных попыток
 }
 
 // Payment status (2 main: paid / unpaid; partial & exempt kept for backend compatibility)
 export type PaymentStatus = 'paid' | 'unpaid' | 'partial' | 'exempt';
+
+// Уровень образования — от него зависит, сколько курсов до выпуска
+export type EducationLevel = 'bachelor' | 'specialist' | 'master';
+
+export const EDUCATION_LEVELS: { value: EducationLevel; label: string; years: number }[] = [
+  { value: 'bachelor', label: 'Бакалавриат', years: 4 },
+  { value: 'specialist', label: 'Специалитет', years: 5 },
+  { value: 'master', label: 'Магистратура', years: 2 },
+];
+
+export const EDUCATION_LEVEL_LABELS: Record<EducationLevel, string> = {
+  bachelor: 'Бакалавриат',
+  specialist: 'Специалитет',
+  master: 'Магистратура',
+};
 
 // Semester type
 export type SemesterType = 'fall' | 'spring';
@@ -25,17 +41,6 @@ export interface Faculty {
   short_name: string | null;
   is_active: boolean;
   created_at: string;
-}
-
-// Student Group
-export interface StudentGroup {
-  id: number;
-  name: string;
-  faculty_id: number;  // Required now
-  course: number | null;
-  is_active: boolean;
-  created_at: string;
-  faculty: Faculty;  // Always present
 }
 
 // Payment Settings
@@ -72,9 +77,12 @@ export interface Payer {
   telegram: string | null;
   vk: string | null;
   faculty_id: number | null;
-  group_id: number | null;
-  group_name: string | null;   // Free-form group code e.g. "1-мд-35"
-  course: number | null;
+  group_name: string | null;   // как хранится в БД, напр. "1-мд-35"
+  group_code: string | null;   // с актуальным курсом, напр. "3-мд-35" — показывать надо это
+  admission_year: number | null;
+  education_level: EducationLevel;
+  course: number | null;       // вычисляется на бэкенде из года поступления
+  is_archived: boolean;        // срок обучения вышел
   department: string | null;   // Кафедра abbreviation e.g. "ЦИАТ", optional
   status: PaymentStatus;
   membership_start: string | null;
@@ -84,8 +92,8 @@ export interface Payer {
   created_at: string;
   updated_at: string;
   total_paid: number;
+  decryption_failed: boolean;  // часть полей не открылась текущим ключом
   faculty?: Faculty;
-  group?: StudentGroup;
   payments?: Payment[];
 }
 
@@ -97,8 +105,6 @@ export interface Payment {
   payment_date: string;
   academic_year: string | null;
   semester: SemesterType | null;
-  period_start: string | null;
-  period_end: string | null;
   receipt_number: string | null;
   payment_method: string | null;
   notes: string | null;
@@ -109,6 +115,7 @@ export interface Payment {
 export interface DashboardStats {
   total_payers: number;
   active_payers: number;
+  archived_payers: number;
   total_debtors: number;
   total_paid_amount: number;
   paid_count: number;
@@ -167,9 +174,9 @@ export interface PayerCreate {
   telegram?: string;
   vk?: string;
   faculty_id?: number;
-  group_id?: number;
   group_name?: string;    // Free-form group code e.g. "1-мд-35"
-  course?: number;
+  admission_year?: number;
+  education_level?: EducationLevel;
   department?: string;    // Кафедра e.g. "ЦИАТ", optional
   status?: PaymentStatus;
   membership_start?: string;
@@ -183,8 +190,6 @@ export interface PaymentCreate {
   payment_date: string;
   academic_year?: string;
   semester?: SemesterType;
-  period_start?: string;
-  period_end?: string;
   receipt_number?: string;
   payment_method?: string;
   notes?: string;
@@ -197,13 +202,43 @@ export interface PaymentSettingsCreate {
   spring_amount: number;
 }
 
-export interface GroupCreate {
-  name: string;
-  faculty_id: number;  // Required
-  course?: number;
-}
-
 export interface FacultyCreate {
   name: string;
   short_name?: string;
+}
+
+// Журнал изменений
+export interface AuditLogEntry {
+  id: number;
+  user_id: number | null;
+  action: string;
+  entity_type: string;
+  entity_id: number | null;
+  summary: string | null;
+  ip_address: string | null;
+  created_at: string;
+}
+
+// Подсказка по ранее заведённым группам — из неё подставляется кафедра
+export interface GroupHint {
+  group_name: string;
+  faculty_id: number | null;
+  department: string | null;
+  education_level: EducationLevel;
+  count: number;
+  latest_admission_year: number | null;
+}
+
+// Что подставится в новую запись из настроек системы
+export interface DataEntryContext {
+  academic_year: string;
+  academic_year_start: number;
+  fall_amount: number | null;
+  spring_amount: number | null;
+  year_total: number | null;
+  currency: string;
+  has_payment_settings: boolean;
+  default_budget_percent: string;
+  default_stipend_amount: string;
+  faculties_count: number;
 }

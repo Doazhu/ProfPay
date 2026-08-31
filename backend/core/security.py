@@ -1,147 +1,181 @@
 """
-Security utilities: password hashing, JWT tokens, CSRF protection, session key encryption.
+Пароли, JWT, CSRF, токены восстановления.
+
+Две замены по сравнению с прошлой версией, обе вынужденные:
+
+passlib → bcrypt напрямую. passlib не обновлялся с 2020 года и на bcrypt 4.x
+ловит AttributeError при определении версии бэкенда. Хуже другое: bcrypt
+принимает максимум 72 байта, а passlib молча обрезал до них. В UTF-8 русская
+буква занимает два байта, поэтому пароль из 40 кириллических символов — это
+76 байт, и первые 36 символов открывали вход наравне с полным паролем.
+Лечится предварительным SHA-256: на вход bcrypt всегда идут ровно 44 байта
+независимо от длины и языка пароля.
+
+python-jose → PyJWT. У jose были CVE-2024-33663 (подмена алгоритма) и
+CVE-2024-33664 (отказ в обслуживании на сжатых токенах), библиотека почти
+не сопровождается, и документация FastAPI перешла на PyJWT.
 """
 import base64
-from datetime import datetime, timedelta
-from typing import Optional, Any
+import hashlib
+import hmac
 import secrets
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
+import jwt
 from pydantic import BaseModel
-from cryptography.fernet import Fernet, InvalidToken
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives import hashes
 
 from backend.core.config import settings
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Стоимость bcrypt. 12 — примерно 250 мс на современном железе: достаточно
+# дорого для перебора и незаметно при одиночном входе.
+BCRYPT_ROUNDS = 12
 
 
 class TokenPayload(BaseModel):
-    """JWT token payload."""
-    sub: str  # user id
+    """Содержимое JWT."""
+    sub: str   # id пользователя
     role: str
     exp: datetime
-    type: str  # "access" or "refresh"
+    type: str  # "access" или "refresh"
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+# ---------------------------------------------------------------------------
+# Пароли
+# ---------------------------------------------------------------------------
+
+def _prehash(password: str) -> bytes:
+    """
+    Свернуть пароль любой длины в 44 байта для bcrypt.
+
+    base64 от SHA-256 не содержит нулевых байтов — иначе bcrypt обрезал бы
+    строку по первому из них.
+    """
+    digest = hashlib.sha256(password.encode("utf-8")).digest()
+    return base64.b64encode(digest)
 
 
 def get_password_hash(password: str) -> str:
-    """Hash a password."""
-    return pwd_context.hash(password)
+    """Захешировать пароль."""
+    return bcrypt.hashpw(_prehash(password), bcrypt.gensalt(BCRYPT_ROUNDS)).decode("ascii")
 
 
-def create_access_token(
-    subject: str,
-    role: str,
-    expires_delta: Optional[timedelta] = None
-) -> str:
-    """Create JWT access token."""
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(
-            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-        )
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """
+    Проверить пароль.
 
-    to_encode = {
+    Сначала текущая схема, затем — старые хеши passlib без предварительного
+    SHA-256. Второй путь нужен ровно один раз: при первом успешном входе
+    пароль перехешируется (см. needs_rehash).
+    """
+    if not hashed_password:
+        return False
+    encoded_hash = hashed_password.encode("ascii")
+
+    try:
+        if bcrypt.checkpw(_prehash(plain_password), encoded_hash):
+            return True
+    except (ValueError, TypeError):
+        return False
+
+    # Старый формат: passlib отдавал bcrypt сырые байты, обрезая до 72.
+    try:
+        return bcrypt.checkpw(plain_password.encode("utf-8")[:72], encoded_hash)
+    except (ValueError, TypeError):
+        return False
+
+
+def needs_rehash(plain_password: str, hashed_password: str) -> bool:
+    """Хеш в старом формате — пароль верный, но пересохранить его надо."""
+    try:
+        return not bcrypt.checkpw(_prehash(plain_password), hashed_password.encode("ascii"))
+    except (ValueError, TypeError):
+        return False
+
+
+# ---------------------------------------------------------------------------
+# JWT
+# ---------------------------------------------------------------------------
+
+def _create_token(subject: str, role: str, token_type: str, expires: timedelta) -> str:
+    now = datetime.now(timezone.utc)
+    payload = {
         "sub": subject,
         "role": role,
-        "exp": expire,
-        "type": "access"
+        "exp": now + expires,
+        "iat": now,
+        "type": token_type,
     }
-    encoded_jwt = jwt.encode(
-        to_encode,
-        settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def create_access_token(subject: str, role: str, expires_delta: Optional[timedelta] = None) -> str:
+    return _create_token(
+        subject, role, "access",
+        expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
-    return encoded_jwt
 
 
-def create_refresh_token(
-    subject: str,
-    role: str,
-    expires_delta: Optional[timedelta] = None
-) -> str:
-    """Create JWT refresh token."""
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(
-            days=settings.REFRESH_TOKEN_EXPIRE_DAYS
-        )
-
-    to_encode = {
-        "sub": subject,
-        "role": role,
-        "exp": expire,
-        "type": "refresh"
-    }
-    encoded_jwt = jwt.encode(
-        to_encode,
-        settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM
+def create_refresh_token(subject: str, role: str, expires_delta: Optional[timedelta] = None) -> str:
+    return _create_token(
+        subject, role, "refresh",
+        expires_delta or timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
-    return encoded_jwt
 
 
 def decode_token(token: str) -> Optional[TokenPayload]:
-    """Decode and validate JWT token."""
+    """
+    Разобрать и проверить JWT.
+
+    Алгоритм задаётся явным списком — без него подпись можно было бы подменить
+    на "none" или на HMAC чужим ключом.
+    """
     try:
         payload = jwt.decode(
             token,
             settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM]
+            algorithms=[settings.ALGORITHM],
+            options={"require": ["exp", "sub", "type"]},
         )
         return TokenPayload(**payload)
-    except JWTError:
+    except (jwt.PyJWTError, ValueError, TypeError):
         return None
 
 
+# ---------------------------------------------------------------------------
+# CSRF
+# ---------------------------------------------------------------------------
+
 def generate_csrf_token() -> str:
-    """Generate a random CSRF token."""
     return secrets.token_urlsafe(32)
 
 
 def validate_csrf_token(token: str, stored_token: str) -> bool:
-    """Validate CSRF token using constant-time comparison."""
+    """Сравнение за постоянное время — обычное == подсказало бы длину совпадения."""
     return secrets.compare_digest(token, stored_token)
 
 
 # ---------------------------------------------------------------------------
-# Session encryption key (for storing master key in HttpOnly cookie)
+# Токены восстановления пароля
 # ---------------------------------------------------------------------------
 
-def _derive_session_fernet_key() -> bytes:
-    """Derive a Fernet key from SECRET_KEY for encrypting session data."""
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=b"profpay-session-key-salt",  # fixed salt is OK here — key is already secret
-        iterations=100_000,
-    )
-    raw = kdf.derive(settings.SECRET_KEY.encode("utf-8"))
-    return base64.urlsafe_b64encode(raw)
+def generate_reset_token() -> str:
+    """Одноразовый токен для ссылки восстановления (256 бит энтропии)."""
+    return secrets.token_urlsafe(32)
 
 
-def encrypt_session_key(master_key: bytes) -> str:
-    """Encrypt the master key for safe storage in a cookie."""
-    fernet_key = _derive_session_fernet_key()
-    f = Fernet(fernet_key)
-    return f.encrypt(master_key).decode("ascii")
+def hash_reset_token(token: str) -> str:
+    """
+    Хеш токена для хранения в БД.
+
+    В базе лежит только хеш: утечка дампа не должна давать возможность
+    сбросить пароль. SHA-256 без соли здесь достаточно — токен и так
+    случайный, перебирать нечего.
+    """
+    return hashlib.sha256(token.encode("ascii")).hexdigest()
 
 
-def decrypt_session_key(token: str) -> Optional[bytes]:
-    """Decrypt the master key from a cookie value. Returns None on failure."""
-    try:
-        fernet_key = _derive_session_fernet_key()
-        f = Fernet(fernet_key)
-        return f.decrypt(token.encode("ascii"))
-    except (InvalidToken, Exception):
-        return None
+def compare_reset_token(token: str, stored_hash: str) -> bool:
+    """Сравнение хешей токена за постоянное время."""
+    return hmac.compare_digest(hash_reset_token(token), stored_hash or "")

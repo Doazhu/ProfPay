@@ -1,123 +1,114 @@
 """
-SQLAlchemy models for the ProfPay application.
+Модели SQLAlchemy.
+
+Что шифруется
+-------------
+Зашифрованы только поля, опасные при утечке дампа: контакты, дата рождения,
+свободные примечания, номера квитанций. Они помечены комментарием
+«шифруется» и имеют тип Text.
+
+ФИО, группа, кафедра, курс и все суммы лежат открытыми. Это сознательный
+размен: по ним нужно искать, сортировать и суммировать в SQL. Когда
+зашифровано было всё, список из двадцати человек поднимал из базы всю таблицу
+со всеми платежами и расшифровывал каждое поле в Python — на тысяче записей
+такое перестаёт работать.
 """
 import enum
 from datetime import datetime, date
 from decimal import Decimal
-from typing import List, Optional
+from typing import Optional
 
 from sqlalchemy import (
     Column, Integer, String, Boolean, DateTime, Date,
-    ForeignKey, Numeric, Enum, Text, Index, LargeBinary
+    ForeignKey, Numeric, Enum, Text, Index, func
 )
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 
 from backend.core.database import Base
+from backend.domain.academic import (
+    apply_course_to_group_code, current_course, is_graduated,
+)
 
 
 class UserRole(str, enum.Enum):
-    """User roles for access control."""
-    ADMIN = "admin"           # Full access
-    OPERATOR = "operator"     # Can edit data
-    VIEWER = "viewer"         # Read-only access
+    """Роли доступа."""
+    ADMIN = "admin"           # всё, включая пользователей и настройки
+    OPERATOR = "operator"     # может изменять данные
+    VIEWER = "viewer"         # только просмотр
 
 
 class PaymentStatus(str, enum.Enum):
-    """Payment status for payers."""
-    PAID = "paid"             # Fully paid
-    PARTIAL = "partial"       # Partially paid
-    UNPAID = "unpaid"         # Not paid (debtor)
-    EXEMPT = "exempt"         # Exempt from payment
+    """Статус оплаты."""
+    PAID = "paid"
+    PARTIAL = "partial"
+    UNPAID = "unpaid"
+    EXEMPT = "exempt"
 
 
 class SemesterType(str, enum.Enum):
-    """Semester type."""
-    FALL = "fall"       # Осенний семестр
-    SPRING = "spring"   # Весенний семестр
+    FALL = "fall"       # осенний
+    SPRING = "spring"   # весенний
 
 
 class SystemUser(Base):
-    """System user for authentication."""
+    """Пользователь системы."""
     __tablename__ = "system_users"
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(50), unique=True, nullable=False, index=True)
-    email = Column(String(100), unique=True, nullable=False, index=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(150), nullable=False)
     role = Column(Enum(UserRole), default=UserRole.VIEWER, nullable=False)
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-    last_login = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    last_login = Column(DateTime(timezone=True), nullable=True)
 
-    # Encryption: wrapped master key and PBKDF2 salt per user
-    encrypted_master_key = Column(LargeBinary, nullable=True)
-    key_salt = Column(LargeBinary, nullable=True)
+    # Защита от перебора пароля: счётчик неудач и время снятия блокировки.
+    failed_login_attempts = Column(Integer, default=0, nullable=False)
+    locked_until = Column(DateTime(timezone=True), nullable=True)
+
+    # Восстановление пароля по почте. В базе только хеш токена: утечка дампа
+    # не должна давать возможность сбросить чужой пароль.
+    reset_token_hash = Column(String(64), nullable=True, index=True)
+    reset_token_expires = Column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self):
         return f"<SystemUser {self.username} ({self.role})>"
 
 
 class Faculty(Base):
-    """Faculty/Institute of the university."""
+    """Деректорат (институт)."""
     __tablename__ = "faculties"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(200), unique=True, nullable=False)
     short_name = Column(String(20), nullable=True)
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, server_default=func.now())
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Relationships
-    groups = relationship("StudentGroup", back_populates="faculty")
     payers = relationship("Payer", back_populates="faculty")
 
     def __repr__(self):
         return f"<Faculty {self.short_name or self.name}>"
 
 
-class StudentGroup(Base):
-    """Student group within a faculty."""
-    __tablename__ = "student_groups"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(50), nullable=False)
-    faculty_id = Column(Integer, ForeignKey("faculties.id"), nullable=False)  # Required
-    course = Column(Integer, nullable=True)  # 1-6 course, optional
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, server_default=func.now())
-
-    # Relationships
-    faculty = relationship("Faculty", back_populates="groups")
-    payers = relationship("Payer", back_populates="group")
-
-    # Index for faster queries
-    __table_args__ = (
-        Index("ix_student_groups_faculty_course", "faculty_id", "course"),
-    )
-
-    def __repr__(self):
-        return f"<StudentGroup {self.name}>"
-
-
 class PaymentSettings(Base):
-    """Payment settings for years and semesters."""
+    """Суммы взносов по учебным годам."""
     __tablename__ = "payment_settings"
 
     id = Column(Integer, primary_key=True, index=True)
-    academic_year = Column(String(9), nullable=False, unique=True)  # "2024-2025"
+    academic_year = Column(String(9), nullable=False, unique=True)  # "2025-2026"
     currency = Column(String(10), default="RUB")
-    fall_amount = Column(Numeric(10, 2), nullable=False)  # Осенний семестр
-    spring_amount = Column(Numeric(10, 2), nullable=False)  # Весенний семестр
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    fall_amount = Column(Numeric(10, 2), nullable=False)
+    spring_amount = Column(Numeric(10, 2), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     @property
     def total_year_amount(self) -> Decimal:
-        """Total amount for the year."""
         return (self.fall_amount or Decimal("0")) + (self.spring_amount or Decimal("0"))
 
     def __repr__(self):
@@ -125,146 +116,154 @@ class PaymentSettings(Base):
 
 
 class AppSettings(Base):
-    """Application-wide settings."""
+    """Настройки приложения ключ-значение."""
     __tablename__ = "app_settings"
 
     id = Column(Integer, primary_key=True, index=True)
     key = Column(String(50), unique=True, nullable=False)
     value = Column(Text, nullable=True)
     description = Column(String(200), nullable=True)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     def __repr__(self):
         return f"<AppSettings {self.key}={self.value}>"
 
 
 class Payer(Base):
-    """Trade union payer (student/employee)."""
+    """Плательщик профсоюзных взносов."""
     __tablename__ = "payers"
 
     id = Column(Integer, primary_key=True, index=True)
 
-    # Personal info (encrypted in DB)
-    last_name = Column(Text, nullable=False)
-    first_name = Column(Text, nullable=False)
-    middle_name = Column(Text, nullable=True)
-    date_of_birth = Column(Text, nullable=True)  # encrypted ISO date string
+    # --- ФИО: открыто, по нему идут поиск и сортировка в SQL ---
+    last_name = Column(String(100), nullable=False, index=True)
+    first_name = Column(String(100), nullable=False)
+    middle_name = Column(String(100), nullable=True)
 
-    # Contact info (encrypted in DB)
+    # --- Контакты: шифруется ---
     email = Column(Text, nullable=True)
     phone = Column(Text, nullable=True)
-    telegram = Column(Text, nullable=True)  # Telegram username
-    vk = Column(Text, nullable=True)  # VK link
+    telegram = Column(Text, nullable=True)
+    vk = Column(Text, nullable=True)
+    date_of_birth = Column(Text, nullable=True)  # шифруется, ISO-строка
 
-    # Budget student info (amounts encrypted in DB)
-    is_budget = Column(Boolean, default=False)
-    stipend_amount = Column(Text, nullable=True)  # encrypted Decimal
-    budget_percent = Column(Text, nullable=True)  # encrypted Decimal
+    # --- Бюджет: открыто, участвует в расчётах ---
+    is_budget = Column(Boolean, default=False, nullable=False)
+    stipend_amount = Column(Numeric(10, 2), nullable=True)
+    budget_percent = Column(Numeric(5, 2), nullable=True)
 
-    # University info - all optional now
-    faculty_id = Column(Integer, ForeignKey("faculties.id"), nullable=True)  # Optional (деректорат)
-    group_id = Column(Integer, ForeignKey("student_groups.id"), nullable=True)  # Legacy FK
-    group_name = Column(Text, nullable=True)  # Free-form encrypted group code e.g. "1-мд-35"
-    course = Column(Integer, nullable=True)  # Course year (1-6), auto-extracted from group_name
-    department = Column(Text, nullable=True)  # Encrypted кафедра abbreviation e.g. "ЦИАТ", optional
+    # --- Учёба: открыто, по нему фильтруют и группируют ---
+    faculty_id = Column(Integer, ForeignKey("faculties.id", ondelete="SET NULL"), nullable=True)
+    group_name = Column(String(50), nullable=True, index=True)  # "1-мд-35"
+    department = Column(String(100), nullable=True)             # кафедра, "ЦИАТ"
 
-    # Payment status
+    # Курс вычисляется из года поступления — см. backend/domain/academic.py
+    admission_year = Column(Integer, nullable=True, index=True)
+    education_level = Column(String(20), nullable=True)
+    course = Column(Integer, nullable=True)  # legacy: до перехода на admission_year
+
     status = Column(Enum(PaymentStatus), default=PaymentStatus.UNPAID, nullable=False, index=True)
 
-    # Membership
     membership_start = Column(Date, nullable=True)
     membership_end = Column(Date, nullable=True)
-    is_active = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
 
-    # Notes
-    notes = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)  # шифруется
 
-    # Timestamps
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-    created_by = Column(Integer, ForeignKey("system_users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_by = Column(Integer, ForeignKey("system_users.id", ondelete="SET NULL"), nullable=True)
 
-    # Relationships
     faculty = relationship("Faculty", back_populates="payers")
-    group = relationship("StudentGroup", back_populates="payers")
     payments = relationship("Payment", back_populates="payer", cascade="all, delete-orphan")
 
-    # Indexes for search (name indexes removed — encrypted data can't be searched in SQL)
     __table_args__ = (
         Index("ix_payers_faculty_status", "faculty_id", "status"),
+        Index("ix_payers_admission", "admission_year", "education_level"),
+        # Сортировка списка идёт по фамилии и имени — составной индекс покрывает её целиком.
+        Index("ix_payers_fio", "last_name", "first_name"),
     )
+
+    # Не колонки. total_paid проставляет репозиторий одним агрегатом на запрос —
+    # свойство с обходом self.payments давало бы N+1 запрос на каждую строку списка.
+    total_paid: Decimal = Decimal("0")
+    decryption_failed = False
 
     @property
     def full_name(self) -> str:
-        """Get full name of the payer."""
         parts = [self.last_name, self.first_name]
         if self.middle_name:
             parts.append(self.middle_name)
-        return " ".join(parts)
+        return " ".join(p for p in parts if p)
 
     @property
-    def total_paid(self) -> Decimal:
-        """Calculate total paid amount."""
-        return sum(p.amount for p in self.payments if p.amount) or Decimal("0")
+    def computed_course(self) -> Optional[int]:
+        """Курс на сегодня. Растёт сам каждое 1 сентября."""
+        return current_course(self.admission_year, self.education_level, self.course)
+
+    @property
+    def is_archived(self) -> bool:
+        """Срок обучения вышел — запись уходит в архив."""
+        return is_graduated(self.admission_year, self.education_level)
+
+    @property
+    def group_code(self) -> Optional[str]:
+        """Код группы с актуальным курсом: «1-мд-35» на третьем курсе → «3-мд-35»."""
+        return apply_course_to_group_code(self.group_name, self.computed_course)
 
     def __repr__(self):
-        return f"<Payer {self.full_name}>"
+        return f"<Payer {self.last_name} {self.first_name}>"
 
 
 class Payment(Base):
-    """Payment record for a payer."""
+    """Платёж."""
     __tablename__ = "payments"
 
     id = Column(Integer, primary_key=True, index=True)
-    payer_id = Column(Integer, ForeignKey("payers.id"), nullable=False)
+    payer_id = Column(Integer, ForeignKey("payers.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    # Payment details (amount encrypted in DB)
-    amount = Column(Text, nullable=False)  # encrypted Decimal
+    # Сумма открыта: по ней считаются итоги и статистика прямо в SQL.
+    amount = Column(Numeric(10, 2), nullable=False)
     payment_date = Column(Date, nullable=False, index=True)
 
-    # Semester info
-    academic_year = Column(String(9), nullable=True)  # "2024-2025"
-    semester = Column(Enum(SemesterType), nullable=True)  # fall/spring
+    academic_year = Column(String(9), nullable=True)
+    semester = Column(Enum(SemesterType), nullable=True)
 
-    # Legacy period fields (optional, for backwards compatibility)
-    period_start = Column(Date, nullable=True)
-    period_end = Column(Date, nullable=True)
+    receipt_number = Column(Text, nullable=True)  # шифруется
+    payment_method = Column(String(50), nullable=True)
+    notes = Column(Text, nullable=True)           # шифруется
 
-    # Optional info (encrypted in DB)
-    receipt_number = Column(Text, nullable=True)
-    payment_method = Column(String(50), nullable=True)  # cash, card, transfer
-    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_by = Column(Integer, ForeignKey("system_users.id", ondelete="SET NULL"), nullable=True)
 
-    # Timestamps
-    created_at = Column(DateTime, server_default=func.now())
-    created_by = Column(Integer, ForeignKey("system_users.id"), nullable=True)
-
-    # Relationships
     payer = relationship("Payer", back_populates="payments")
 
-    # Index for period queries
     __table_args__ = (
         Index("ix_payments_academic_year", "academic_year", "semester"),
     )
 
+    decryption_failed = False
+
     def __repr__(self):
-        return f"<Payment {self.amount} for payer_id={self.payer_id}>"
+        return f"<Payment {self.amount} payer_id={self.payer_id}>"
 
 
 class AuditLog(Base):
-    """Audit log for tracking changes."""
+    """Журнал изменений."""
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("system_users.id"), nullable=True)
-    action = Column(String(50), nullable=False)  # create, update, delete, login, etc.
-    entity_type = Column(String(50), nullable=False)  # payer, payment, user, etc.
+    user_id = Column(Integer, ForeignKey("system_users.id", ondelete="SET NULL"), nullable=True)
+    action = Column(String(50), nullable=False)       # create / update / delete / login...
+    entity_type = Column(String(50), nullable=False)  # payer / payment / user...
     entity_id = Column(Integer, nullable=True)
-    old_values = Column(Text, nullable=True)  # JSON
-    new_values = Column(Text, nullable=True)  # JSON
+    summary = Column(Text, nullable=True)             # шифруется: что именно изменилось
     ip_address = Column(String(45), nullable=True)
-    user_agent = Column(String(255), nullable=True)
-    created_at = Column(DateTime, server_default=func.now(), index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    __table_args__ = (
+        Index("ix_audit_entity", "entity_type", "entity_id"),
+    )
 
     def __repr__(self):
-        return f"<AuditLog {self.action} on {self.entity_type}>"
+        return f"<AuditLog {self.action} {self.entity_type}#{self.entity_id}>"

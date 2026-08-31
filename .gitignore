@@ -303,7 +303,6 @@ output.css
 
 .kiro
 .vscode
-docker-compose.local.yml
 .claude
 
 # SSL certificates and certbot data

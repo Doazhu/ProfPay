@@ -4,7 +4,6 @@ import type {
   LoginCredentials,
   TokenResponse,
   Faculty,
-  StudentGroup,
   Payer,
   Payment,
   PayerCreate,
@@ -16,8 +15,10 @@ import type {
   FacultyStats,
   MonthlyStats,
   PaginatedResponse,
+  AuditLogEntry,
+  GroupHint,
+  DataEntryContext,
   PaymentStatus,
-  GroupCreate,
   FacultyCreate,
 } from '../types';
 
@@ -72,7 +73,8 @@ api.interceptors.response.use(
       } catch {
         isRefreshing = false;
         // Redirect to login only if not already there
-        if (window.location.pathname !== '/login') {
+        const publicPaths = ['/login', '/reset-password', '/forgot-password'];
+        if (!publicPaths.includes(window.location.pathname)) {
           window.location.href = '/login';
         }
       }
@@ -109,6 +111,17 @@ export const authApi = {
       new_password: newPassword,
     });
   },
+
+  /** Запросить письмо со ссылкой восстановления. */
+  requestPasswordReset: async (email: string): Promise<{ message: string }> => {
+    const { data } = await api.post('/auth/password-reset/request', { email });
+    return data;
+  },
+
+  /** Задать новый пароль по токену из письма. */
+  confirmPasswordReset: async (token: string, newPassword: string): Promise<void> => {
+    await api.post('/auth/password-reset/confirm', { token, new_password: newPassword });
+  },
 };
 
 // ============== User Management API ==============
@@ -138,6 +151,16 @@ export const userApi = {
   delete: async (id: number): Promise<void> => {
     await api.delete(`/auth/users/${id}`);
   },
+
+  /** Задать пользователю новый пароль и снять блокировку входа. */
+  setPassword: async (id: number, newPassword: string): Promise<void> => {
+    await api.post(`/auth/users/${id}/password`, { new_password: newPassword });
+  },
+
+  /** Снять блокировку входа, не меняя пароль. */
+  unlock: async (id: number): Promise<void> => {
+    await api.post(`/auth/users/${id}/unlock`);
+  },
 };
 
 // ============== Faculty API ==============
@@ -160,31 +183,6 @@ export const facultyApi = {
 
   delete: async (id: number): Promise<void> => {
     await api.delete(`/faculties/${id}`);
-  },
-};
-
-// ============== Group API ==============
-
-export const groupApi = {
-  getAll: async (facultyId?: number, activeOnly = true): Promise<StudentGroup[]> => {
-    const { data } = await api.get('/groups', {
-      params: { faculty_id: facultyId, active_only: activeOnly },
-    });
-    return data;
-  },
-
-  create: async (group: GroupCreate): Promise<StudentGroup> => {
-    const { data } = await api.post('/groups', group);
-    return data;
-  },
-
-  update: async (id: number, group: Partial<StudentGroup>): Promise<StudentGroup> => {
-    const { data } = await api.put(`/groups/${id}`, group);
-    return data;
-  },
-
-  delete: async (id: number): Promise<void> => {
-    await api.delete(`/groups/${id}`);
   },
 };
 
@@ -229,15 +227,32 @@ export const budgetSettingsApi = {
   },
 };
 
+// ============== Контекст ввода данных ==============
+
+export const dataEntryApi = {
+  /** Что подставится в новую запись из настроек системы. */
+  getContext: async (): Promise<DataEntryContext> => {
+    const { data } = await api.get('/data-entry-context');
+    return data;
+  },
+
+  /** Уже заведённые группы — для подстановки кафедры и уровня. */
+  getGroupHints: async (facultyId?: number): Promise<GroupHint[]> => {
+    const { data } = await api.get('/group-hints', { params: { faculty_id: facultyId } });
+    return data;
+  },
+};
+
 // ============== Payer API ==============
 
 export interface PayerFilters {
   page?: number;
   per_page?: number;
   faculty_id?: number;
-  group_id?: number;
   status?: PaymentStatus;
   search?: string;
+  /** active — без архива (по умолчанию), archived — только архив, all — все */
+  archive?: 'active' | 'archived' | 'all';
 }
 
 export const payerApi = {
@@ -268,6 +283,11 @@ export const payerApi = {
   getDebtors: async (filters: PayerFilters = {}): Promise<PaginatedResponse<Payer>> => {
     const { data } = await api.get('/debtors', { params: filters });
     return data;
+  },
+
+  /** Полное удаление вместе с платежами. По умолчанию запись только скрывается. */
+  hardDelete: async (id: number): Promise<void> => {
+    await api.delete(`/payers/${id}`, { params: { hard: true } });
   },
 };
 
@@ -309,6 +329,11 @@ export const statsApi = {
 
   getMonthly: async (year?: number): Promise<MonthlyStats[]> => {
     const { data } = await api.get('/stats/monthly', { params: { year } });
+    return data;
+  },
+
+  getAudit: async (limit = 100): Promise<AuditLogEntry[]> => {
+    const { data } = await api.get('/stats/audit', { params: { limit } });
     return data;
   },
 };

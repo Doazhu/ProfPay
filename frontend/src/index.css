@@ -1,382 +1,306 @@
-@tailwind base;
+/*
+  Оформление ProfPay поверх Radix Themes.
+
+  Базовый сброс Tailwind (@tailwind base) намеренно выключен — и здесь,
+  и в конфиге через corePlugins.preflight. Его сброс для <button> перебивает
+  фон кнопок Radix Themes, и они рисуются прозрачными; об этом прямо сказано
+  в документации Radix. Сброс даёт сама Radix Themes, а от Tailwind нам нужны
+  только утилиты раскладки.
+
+  Цвета берутся из токенов темы (--accent-*, --gray-*), поэтому светлый
+  и тёмный вид получаются сами: Radix подменяет значения токенов, а не наши
+  правила.
+*/
+
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  body {
-    @apply bg-light text-dark antialiased;
-    font-family: 'Rubik', system-ui, -apple-system, sans-serif;
-    overflow-x: hidden;
-  }
+html { -webkit-text-size-adjust: 100%; }
 
-  h1, h2, h3, h4, h5, h6 {
-    font-family: 'JetBrains Mono', monospace;
-    letter-spacing: -0.01em;
-  }
+body { margin: 0; overflow-x: hidden; }
 
-  @media (min-width: 768px) {
-    html {
-      scroll-behavior: smooth;
-    }
-  }
+/*
+  Минимальный сброс вместо @tailwind base.
 
-  html {
-    font-size: 16px;
-    -webkit-text-size-adjust: 100%;
-  }
-}
+  Полный сброс Tailwind пришлось выключить из-за конфликта с кнопками Radix,
+  но вместе с ним ушли и безобидные правила. Возвращаем только их: без первого
+  все ссылки в таблицах стали подчёркнутыми, без остальных у заголовков
+  и абзацев вернулись браузерные отступы, ломающие плотную вёрстку.
+
+  Собственные компоненты Radix Themes это не затрагивает — они задают свои
+  стили с большей специфичностью.
+*/
+a { color: inherit; text-decoration: inherit; }
+
+h1, h2, h3, h4, h5, h6, p, figure, blockquote { margin: 0; }
+
+h1, h2, h3, h4, h5, h6 { font-size: inherit; font-weight: inherit; }
+
+ul, ol { margin: 0; padding: 0; list-style: none; }
+
+img, svg, video, canvas { display: block; max-width: 100%; }
+
+button, input, select, textarea { font: inherit; color: inherit; }
+
+table { border-collapse: collapse; }
+
+/* Цифры выравниваются по разрядам везде, где их сравнивают взглядом. */
+table, .tabular, input[type="number"] { font-variant-numeric: tabular-nums; }
+
+::selection { background: var(--accent-a5); }
 
 @layer components {
-  /* ========================================
-     TOUCH TARGET
-     ======================================== */
-  .touch-target {
-    min-width: 44px;
-    min-height: 44px;
-  }
+  .touch-target { min-width: 44px; min-height: 44px; }
 
-  /* ========================================
-     BUTTONS - Clean, modern with soft glow
-     ======================================== */
+  /* ---------------- Кнопки ----------------
+     Оставлены для мест, где ещё не заменены на <Button> из Radix Themes,
+     и повторяют их вид, чтобы страницы не выглядели разнородно. */
+
   .btn {
-    @apply inline-flex items-center justify-center px-5 py-2.5 rounded-xl font-medium text-sm
-           transition-all duration-200 ease-out
-           focus:outline-none focus:ring-2 focus:ring-offset-2
-           active:scale-[0.98]
-           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:transform-none disabled:active:scale-100;
-    will-change: transform, box-shadow;
-    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-height: var(--space-6);
+    padding: 0 var(--space-3);
+    border: 1px solid transparent;
+    border-radius: var(--radius-3);
+    font-family: var(--default-font-family);
+    font-size: var(--font-size-2);
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 100ms, border-color 100ms, color 100ms;
   }
 
-  .btn-primary {
-    @apply btn text-white
-           hover:shadow-glow-primary hover:-translate-y-0.5
-           active:translate-y-0 active:shadow-soft
-           focus:ring-primary;
-    background: linear-gradient(135deg, #1F9788 0%, #2ab8a6 100%);
-  }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  .btn-primary:hover {
-    background: linear-gradient(135deg, #177a6d 0%, #1F9788 100%);
-  }
+  .btn-primary { background: var(--accent-9); color: var(--accent-contrast); }
+  .btn-primary:not(:disabled):hover { background: var(--accent-10); }
 
-  .btn-secondary {
-    @apply btn text-white
-           hover:shadow-glow-secondary hover:-translate-y-0.5
-           active:translate-y-0 active:shadow-soft
-           focus:ring-secondary;
-    background: linear-gradient(135deg, #5852ED 0%, #7a75f1 100%);
-  }
-
-  .btn-secondary:hover {
-    background: linear-gradient(135deg, #4540c9 0%, #5852ED 100%);
-  }
+  .btn-secondary { background: var(--gray-12); color: var(--gray-1); }
+  .btn-secondary:not(:disabled):hover { opacity: 0.9; }
 
   .btn-outline {
-    @apply btn border border-light-darker text-accent bg-white
-           hover:border-primary hover:text-primary hover:bg-primary-50 hover:-translate-y-0.5 hover:shadow-soft
-           active:translate-y-0
-           focus:ring-primary;
+    background: var(--color-surface);
+    border-color: var(--gray-a7);
+    color: var(--gray-12);
+  }
+  .btn-outline:not(:disabled):hover { background: var(--gray-a3); border-color: var(--gray-a8); }
+
+  .btn-ghost { background: transparent; color: var(--gray-11); }
+  .btn-ghost:not(:disabled):hover { background: var(--gray-a3); color: var(--gray-12); }
+
+  /* Необратимые действия отделены цветом, чтобы не нажать мимо. */
+  .btn-danger {
+    background: var(--color-surface);
+    border-color: var(--red-a7);
+    color: var(--red-11);
+  }
+  .btn-danger:not(:disabled):hover {
+    background: var(--red-9);
+    border-color: var(--red-9);
+    color: white;
   }
 
-  .btn-ghost {
-    @apply btn text-accent
-           hover:bg-light-dark/60 hover:-translate-y-0.5
-           active:translate-y-0 active:bg-light-darker
-           focus:ring-accent;
-  }
+  .btn-sm { min-height: var(--space-5); padding: 0 var(--space-2); font-size: var(--font-size-1); }
+  .btn-lg { min-height: var(--space-7); padding: 0 var(--space-4); font-size: var(--font-size-3); }
 
-  .btn-sm {
-    @apply px-3.5 py-1.5 text-sm rounded-lg;
-    min-height: 36px;
-  }
+  /* ---------------- Поля ввода ---------------- */
 
-  @media (max-width: 767px) {
-    .btn-sm {
-      min-height: 44px;
-      @apply px-4 py-2;
-    }
-  }
-
-  /* ========================================
-     INPUTS - Rounded, clean focus
-     ======================================== */
   .input {
-    @apply w-full px-4 py-2.5 border border-light-darker rounded-xl bg-white
-           transition-all duration-200 ease-out
-           hover:border-primary/30
-           focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:shadow-soft
-           disabled:bg-light disabled:cursor-not-allowed disabled:hover:border-light-darker;
-    min-height: 44px;
-    font-size: 16px;
+    width: 100%;
+    min-height: var(--space-6);
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-2);
+    border: 1px solid var(--gray-a7);
+    background: var(--color-surface);
+    color: var(--gray-12);
+    font-family: var(--default-font-family);
+    font-size: var(--font-size-2);
+    transition: border-color 100ms, box-shadow 100ms;
   }
 
-  .input-error {
-    @apply input border-red-400
-           hover:border-red-300
-           focus:ring-red-500/20 focus:border-red-500;
+  .input::placeholder { color: var(--gray-a9); }
+
+  .input:focus {
+    outline: none;
+    border-color: var(--accent-8);
+    box-shadow: 0 0 0 1px var(--accent-8);
   }
 
-  /* ========================================
-     CARDS - Borderless, soft shadow, modern
-     ======================================== */
+  .input:disabled { background: var(--gray-a2); color: var(--gray-a9); cursor: not-allowed; }
+
+  textarea.input { padding: var(--space-2); line-height: 1.5; }
+
+  .input-error { border-color: var(--red-8); }
+  .input-error:focus { border-color: var(--red-8); box-shadow: 0 0 0 1px var(--red-8); }
+
+  .label {
+    display: block;
+    margin-bottom: var(--space-1);
+    font-size: var(--font-size-1);
+    font-weight: 500;
+    color: var(--gray-11);
+  }
+
+  .hint { margin-top: var(--space-1); font-size: var(--font-size-1); color: var(--gray-10); }
+
+  /* ---------------- Поверхности ---------------- */
+
   .card {
-    @apply bg-white rounded-2xl shadow-soft p-5 md:p-6
-           transition-all duration-300 ease-out;
+    background: var(--color-panel-solid);
+    border: 1px solid var(--gray-a5);
+    border-radius: var(--radius-4);
+    padding: var(--space-4);
+  }
+
+  .card-flush {
+    background: var(--color-panel-solid);
+    border: 1px solid var(--gray-a5);
+    border-radius: var(--radius-4);
+    overflow: hidden;
   }
 
   .card-interactive {
-    @apply card cursor-pointer
-           hover:-translate-y-1 hover:shadow-soft-md
-           active:translate-y-0 active:shadow-soft;
+    background: var(--color-panel-solid);
+    border: 1px solid var(--gray-a5);
+    border-radius: var(--radius-4);
+    padding: var(--space-4);
+    transition: border-color 100ms;
   }
+  .card-interactive:hover { border-color: var(--gray-a8); }
 
-  /* ========================================
-     BADGES - Refined pills
-     ======================================== */
+  .divider { border-top: 1px solid var(--gray-a5); }
+
+  /* ---------------- Метки состояния ----------------
+     Цвета не из акцента: «оплачено» — это состояние, а не фирменный цвет.
+     Иначе при смене акцента поедет смысл. */
+
   .badge {
-    @apply inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold
-           transition-all duration-150 ease-out;
+    display: inline-flex;
+    align-items: center;
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-2);
+    border: 1px solid transparent;
+    font-size: var(--font-size-1);
+    font-weight: 500;
+    line-height: 1.4;
+    white-space: nowrap;
   }
 
-  .badge-success {
-    @apply badge bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60;
-  }
+  .badge-success { background: var(--jade-a3);  color: var(--jade-11);  border-color: var(--jade-a6); }
+  .badge-danger  { background: var(--red-a3);   color: var(--red-11);   border-color: var(--red-a6); }
+  .badge-warning { background: var(--amber-a3); color: var(--amber-11); border-color: var(--amber-a6); }
+  .badge-info    { background: var(--blue-a3);  color: var(--blue-11);  border-color: var(--blue-a6); }
+  .badge-muted   { background: var(--gray-a3);  color: var(--gray-11);  border-color: var(--gray-a6); }
 
-  .badge-warning {
-    @apply badge bg-amber-50 text-amber-700 ring-1 ring-amber-200/60;
-  }
+  /* ---------------- Навигация ---------------- */
 
-  .badge-danger {
-    @apply badge bg-red-50 text-red-700 ring-1 ring-red-200/60;
-  }
-
-  .badge-info {
-    @apply badge bg-blue-50 text-blue-700 ring-1 ring-blue-200/60;
-  }
-
-  @media (hover: hover) {
-    .badge-success:hover,
-    .badge-warning:hover,
-    .badge-danger:hover,
-    .badge-info:hover {
-      @apply scale-105;
-    }
-  }
-
-  /* ========================================
-     SIDEBAR - Modern with accent indicator
-     ======================================== */
   .sidebar-link {
-    @apply flex items-center gap-3 px-4 py-3 rounded-xl text-accent
-           transition-all duration-200 ease-out
-           hover:bg-primary-50/60 hover:text-dark
-           active:bg-primary-100/60;
-    min-height: 48px;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 38px;
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-3);
+    color: var(--gray-11);
+    font-size: var(--font-size-2);
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 100ms, color 100ms;
   }
-
-  @media (hover: hover) {
-    .sidebar-link:hover {
-      @apply translate-x-0.5;
-    }
-  }
+  .sidebar-link:hover { background: var(--gray-a3); color: var(--gray-12); }
 
   .sidebar-link-active {
-    @apply flex items-center gap-3 px-4 py-3 rounded-xl
-           bg-primary/10 text-primary font-medium
-           border-l-[3px] border-primary
-           transition-all duration-200 ease-out
-           hover:bg-primary/15
-           active:bg-primary/20;
-    min-height: 48px;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 38px;
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-3);
+    background: var(--accent-a3);
+    color: var(--accent-11);
+    font-size: var(--font-size-2);
+    font-weight: 500;
+    text-decoration: none;
   }
 
-  /* ========================================
-     TABLE ROWS - Clean hover
-     ======================================== */
-  .table-row-interactive {
-    @apply transition-colors duration-150 ease-out cursor-pointer;
+  /* ---------------- Таблицы ---------------- */
+
+  .th {
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--gray-a6);
+    color: var(--gray-11);
+    font-size: var(--font-size-1);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
   }
 
-  @media (hover: hover) {
-    .table-row-interactive:hover {
-      @apply bg-primary-50/40;
-    }
+  .td {
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--gray-a4);
+    vertical-align: middle;
   }
 
-  .table-row-interactive:active {
-    @apply bg-primary-50/60;
-  }
+  .table-row-interactive { transition: background-color 80ms; }
+  .table-row-interactive:hover { background: var(--gray-a2); }
 
-  /* ========================================
-     LOADING SPINNER
-     ======================================== */
+  /* Архивные строки приглушены, но остаются читаемыми. */
+  .row-archived { color: var(--gray-10); background: var(--gray-a2); }
+
+  /* ---------------- Прочее ---------------- */
+
   .spinner {
-    @apply animate-spin;
+    border: 2px solid var(--gray-a5);
+    border-top-color: var(--accent-9);
+    border-radius: 50%;
+    animation: spin 700ms linear infinite;
   }
 
   .spinner-container {
-    @apply flex items-center justify-center;
-    animation: fadeIn 200ms ease-out;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-8) 0;
   }
 
-  /* ========================================
-     MOBILE TABLE HELPER
-     ======================================== */
-  .table-col-mobile-hidden {
-    @apply hidden sm:table-cell;
-  }
+  .scrollbar-thin { scrollbar-width: thin; }
+  .scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--gray-a5); border-radius: var(--radius-2); }
 
-  .table-col-tablet-hidden {
-    @apply hidden md:table-cell;
-  }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0); }
 }
 
 @layer utilities {
-  .scrollbar-thin {
-    scrollbar-width: thin;
-  }
-
-  .scrollbar-thin::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .scrollbar-thin::-webkit-scrollbar-track {
-    @apply bg-transparent;
-  }
-
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    @apply bg-light-darker rounded-full hover:bg-accent/40 transition-colors duration-150;
-  }
-
-  /* ========================================
-     FADE IN ANIMATION
-     ======================================== */
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(4px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .animate-fade-in {
-    animation: fadeIn 300ms ease-out;
-  }
-
-  .animate-fade-in-fast {
-    animation: fadeIn 150ms ease-out;
-  }
-
-  /* ========================================
-     SLIDE IN ANIMATION
-     ======================================== */
-  @keyframes slideIn {
-    from {
-      opacity: 0;
-      transform: translateY(-8px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .animate-slide-in {
-    animation: slideIn 200ms ease-out;
-  }
-
-  /* ========================================
-     SCALE IN ANIMATION
-     ======================================== */
-  @keyframes scaleIn {
-    from {
-      opacity: 0;
-      transform: scale(0.95);
-    }
-    to {
-      opacity: 1;
-      transform: scale(1);
-    }
-  }
-
-  .animate-scale-in {
-    animation: scaleIn 200ms ease-out;
-  }
-
-  /* ========================================
-     FADE IN UP ANIMATION
-     ======================================== */
-  @keyframes fadeInUp {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .animate-fade-in-up {
-    animation: fadeInUp 400ms ease-out;
-  }
+  .animate-fade-in { animation: fade-in 120ms ease-out; }
+  .animate-fade-in-fast { animation: fade-in 90ms ease-out; }
+  /* Старые имена оставлены, чтобы не править разметку на каждой странице:
+     эффект у всех один — короткое проявление без движения. */
+  .animate-fade-in-up,
+  .animate-scale-in,
+  .animate-slide-in,
+  .animate-slide-in-right { animation: fade-in 120ms ease-out; }
 }
 
-/* ========================================
-   MOBILE OPTIMIZATIONS
-   ======================================== */
-@media (max-width: 767px) {
-  .btn,
-  .sidebar-link,
-  .sidebar-link-active,
-  .card-interactive {
-    -webkit-user-select: none;
-    user-select: none;
-    -webkit-tap-highlight-color: transparent;
-  }
-}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-/* ========================================
-   REDUCED MOTION - Accessibility
-   ======================================== */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-
-  .btn,
-  .card,
-  .card-interactive,
-  .sidebar-link,
-  .sidebar-link-active,
-  .badge,
-  .table-row-interactive {
-    transform: none !important;
-  }
-
-  html {
-    scroll-behavior: auto;
-  }
-
-  aside {
-    transition-duration: 0.01ms !important;
-  }
 }
 
-/* ========================================
-   SAFE AREA INSETS
-   ======================================== */
-@supports (padding: env(safe-area-inset-bottom)) {
-  .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
+@media print {
+  aside, nav, .no-print, .btn { display: none !important; }
+  .card, .card-flush { border: none; padding: 0; }
+  body { background: white; }
 }

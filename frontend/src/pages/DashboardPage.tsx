@@ -14,9 +14,9 @@ interface StatCardProps {
 
 function StatCard({ title, value, subtitle, color, icon }: StatCardProps) {
   const colorClasses = {
-    primary: 'bg-primary/10 text-primary',
+    primary: 'bg-primary-100 text-primary',
     secondary: 'bg-secondary/10 text-secondary',
-    accent: 'bg-accent/10 text-accent',
+    accent: 'bg-light-dark text-accent',
     success: 'bg-green-100 text-green-600',
     warning: 'bg-yellow-100 text-yellow-600',
     danger: 'bg-red-100 text-red-600',
@@ -190,7 +190,7 @@ export default function DashboardPage() {
         {/* Mobile cards */}
         <div className="md:hidden space-y-3">
           {facultyStats.map((faculty) => (
-            <div key={faculty.faculty_id} className="p-3 bg-light-dark/30 rounded-lg">
+            <div key={faculty.faculty_id} className="p-3 bg-light-dark rounded-lg">
               <p className="font-medium text-dark mb-2">{faculty.faculty_name}</p>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
@@ -219,7 +219,7 @@ export default function DashboardPage() {
           to="/payers"
           className="card-interactive flex items-center gap-3 md:gap-4 group"
         >
-          <div className="p-2 md:p-3 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-all duration-200 flex-shrink-0">
+          <div className="p-2 md:p-3 rounded-lg bg-primary-100 text-primary group-hover:bg-primary group-hover:text-white transition-all duration-200 flex-shrink-0">
             <UsersIcon />
           </div>
           <div className="min-w-0">

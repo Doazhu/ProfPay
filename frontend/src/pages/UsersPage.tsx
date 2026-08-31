@@ -29,6 +29,11 @@ export default function UsersPage() {
   const [newFullName, setNewFullName] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('viewer');
 
+  // Сброс пароля: без него пользователь без ключа шифрования не сможет войти
+  const [resetUserId, setResetUserId] = useState<number | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetNotice, setResetNotice] = useState('');
+
   // Edit state
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [editEmail, setEditEmail] = useState('');
@@ -111,6 +116,35 @@ export default function UsersPage() {
       await loadUsers();
     } catch (err) {
       console.error('Failed to toggle user:', err);
+    }
+  };
+
+  const handleResetPassword = async (user: User) => {
+    if (resetPassword.length < 8) {
+      setError('Пароль должен быть не короче 8 символов');
+      return;
+    }
+    setError('');
+    try {
+      await userApi.setPassword(user.id, resetPassword);
+      setResetUserId(null);
+      setResetPassword('');
+      setResetNotice(`Пароль для «${user.username}» изменён, ключ шифрования выдан`);
+      setTimeout(() => setResetNotice(''), 6000);
+    } catch (err) {
+      setError(extractErrorMessage(err, 'Не удалось изменить пароль'));
+    }
+  };
+
+  const handleUnlock = async (user: User) => {
+    setError('');
+    try {
+      await userApi.unlock(user.id);
+      setResetNotice(`Блокировка входа для «${user.username}» снята`);
+      setTimeout(() => setResetNotice(''), 6000);
+      await loadUsers();
+    } catch (err) {
+      setError(extractErrorMessage(err, 'Не удалось снять блокировку'));
     }
   };
 
@@ -316,7 +350,7 @@ export default function UsersPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-medium text-dark">{user.full_name}</p>
                         {user.id === currentUser?.id && (
-                          <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary">Вы</span>
+                          <span className="text-xs px-2 py-0.5 rounded bg-primary-100 text-primary">Вы</span>
                         )}
                       </div>
                       <p className="text-sm text-accent">
@@ -330,17 +364,39 @@ export default function UsersPage() {
                       <span className={`text-xs px-2 py-1 rounded ${roleColors[user.role]}`}>
                         {roleLabels[user.role]}
                       </span>
-                      <span className={`text-xs px-2 py-1 rounded ${
-                        user.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                      }`}>
-                        {user.is_active ? 'Активен' : 'Неактивен'}
+                      <span className={user.is_active ? 'badge-success' : 'badge-danger'}>
+                        {user.is_active ? 'Активен' : 'Отключён'}
                       </span>
+                      {user.is_locked && (
+                        <span className="badge-warning" title="Вход заблокирован после неудачных попыток">
+                          Вход заблокирован
+                        </span>
+                      )}
                       <button
                         onClick={() => handleEditUser(user)}
                         className="text-primary hover:text-primary-dark text-sm py-1"
                       >
                         Изменить
                       </button>
+                      <button
+                        onClick={() => {
+                          setResetUserId(resetUserId === user.id ? null : user.id);
+                          setResetPassword('');
+                        }}
+                        className="text-primary hover:text-primary-dark text-sm py-1"
+                        title="Задать новый пароль"
+                      >
+                        Пароль
+                      </button>
+                      {user.is_locked && (
+                        <button
+                          onClick={() => handleUnlock(user)}
+                          className="text-primary hover:text-primary-dark text-sm py-1"
+                          title="Снять блокировку входа, не меняя пароль"
+                        >
+                          Разблокировать
+                        </button>
+                      )}
                       {user.id !== currentUser?.id && (
                         <>
                           <button
@@ -362,17 +418,56 @@ export default function UsersPage() {
                     </div>
                   </div>
                 )}
+
+                {resetUserId === user.id && (
+                  <div className="mt-3 pt-3 border-t border-line">
+                    <label className="block text-xs text-accent mb-1">
+                      Новый пароль для «{user.username}»
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="password"
+                        value={resetPassword}
+                        onChange={(e) => setResetPassword(e.target.value)}
+                        className="input flex-1"
+                        placeholder="Минимум 8 символов"
+                        autoComplete="new-password"
+                      />
+                      <button onClick={() => handleResetPassword(user)} className="btn-primary">
+                        Задать
+                      </button>
+                      <button onClick={() => setResetUserId(null)} className="btn-ghost">
+                        Отмена
+                      </button>
+                    </div>
+                    <p className="text-xs text-accent-light mt-1">
+                      Вместе с паролем пользователю выдаётся ключ шифрования — без него
+                      он не сможет открыть данные плательщиков.
+                    </p>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
       </div>
 
+      {resetNotice && (
+        <div className="mt-4 p-3 bg-green-50 border border-green-200 text-green-800 rounded-lg text-sm">
+          {resetNotice}
+        </div>
+      )}
+
       {/* Info */}
       <div className="mt-6 p-3 md:p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
         <p className="text-sm text-yellow-800">
           <strong>Примечание:</strong> Деактивация блокирует вход пользователя в систему, но сохраняет его данные.
           Удаление полностью удаляет учётную запись.
+        </p>
+        <p className="text-sm text-yellow-800 mt-2">
+          После {`${5}`} неудачных попыток входа учётная запись блокируется на 15 минут.
+          Снять блокировку раньше можно кнопкой «Разблокировать», а если пароль забыт —
+          задать новый кнопкой «Пароль» или восстановить самому по почте со страницы входа.
         </p>
       </div>
     </div>

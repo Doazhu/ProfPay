@@ -1,6 +1,8 @@
 import { useState, FormEvent } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { extractErrorMessage } from '../services/api';
+import { safeRedirectPath } from '../utils/navigation';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -11,8 +13,12 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const justReset = searchParams.get('reset') === '1';
 
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
+  // Адрес возврата приходит из адресной строки — пропускаем только
+  // относительные пути внутри приложения (см. utils/navigation.ts).
+  const from = safeRedirectPath((location.state as { from?: { pathname?: string } })?.from?.pathname);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -23,7 +29,9 @@ export default function LoginPage() {
       await login({ username, password });
       navigate(from, { replace: true });
     } catch (err) {
-      setError('Неверное имя пользователя или пароль');
+      // Сообщение с сервера полезнее общей фразы: в нём остаток попыток
+      // и время блокировки.
+      setError(extractErrorMessage(err, 'Неверный логин или пароль'));
     } finally {
       setIsLoading(false);
     }
@@ -31,19 +39,28 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-light px-4 py-8">
-      <div className="w-full max-w-md animate-fade-in-up">
-        {/* Logo */}
-        <div className="text-center mb-6 md:mb-8">
-          <h1 className="text-2xl md:text-4xl font-bold text-primary">ProfPay</h1>
-          <p className="text-accent mt-2 text-sm md:text-base">Система учёта плательщиков Профкома</p>
+      <div className="w-full max-w-sm animate-fade-in">
+        <div className="mb-6">
+          <div className="flex items-center gap-2.5 mb-1">
+            <div className="w-8 h-8 rounded bg-primary flex items-center justify-center text-white font-semibold text-sm">
+              P
+            </div>
+            <h1 className="text-xl font-semibold text-dark">ProfPay</h1>
+          </div>
+          <p className="text-sm text-accent">Учёт плательщиков профсоюзных взносов</p>
         </div>
 
-        {/* Login Form */}
         <div className="card">
-          <h2 className="text-lg md:text-xl font-semibold text-dark mb-6">Вход в систему</h2>
+          <h2 className="text-lg font-semibold text-dark mb-4">Вход</h2>
+
+          {justReset && (
+            <div className="mb-4 px-3 py-2 rounded border border-[#C6E3D4] bg-[#EDF6F1] text-state-paid text-sm">
+              Пароль изменён. Войдите с новым паролем.
+            </div>
+          )}
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm animate-scale-in">
+            <div className="mb-4 px-3 py-2 rounded border border-[#EFCFCC] bg-[#FBEEED] text-state-unpaid text-sm">
               {error}
             </div>
           )}
@@ -51,7 +68,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-accent mb-1">
-                Имя пользователя
+                Логин или почта
               </label>
               <input
                 id="username"
@@ -66,16 +83,21 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-accent mb-1">
-                Пароль
-              </label>
+              <div className="flex items-baseline justify-between mb-1">
+                <label htmlFor="password" className="block text-sm font-medium text-accent">
+                  Пароль
+                </label>
+                <Link to="/forgot-password" className="text-xs text-primary hover:text-primary-dark">
+                  Забыли пароль?
+                </Link>
+              </div>
               <input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input"
-                placeholder="********"
+                placeholder="••••••••"
                 required
                 autoComplete="current-password"
               />
@@ -84,7 +106,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-primary btn-lg w-full"
             >
               {isLoading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -100,8 +122,8 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-accent">
-            Для получения доступа обратитесь к администратору
+          <p className="hint mt-5 text-center">
+            Нет доступа? Обратитесь к администратору профкома
           </p>
         </div>
       </div>

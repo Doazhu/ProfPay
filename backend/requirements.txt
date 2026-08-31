@@ -2,12 +2,13 @@ fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
 sqlalchemy>=2.0.0
 psycopg2-binary>=2.9.9
-alembic>=1.13.0
 pydantic>=2.5.0
 pydantic-settings>=2.1.0
-python-jose[cryptography]>=3.3.0
-passlib>=1.7.4
-bcrypt>=4.0.1,<5.0
+# PyJWT вместо python-jose: у jose CVE-2024-33663/33664 и он почти не сопровождается.
+PyJWT>=2.10.0
+# bcrypt напрямую вместо passlib: passlib заброшен с 2020 и на bcrypt 4.x
+# ловит AttributeError, а ещё молча обрезал пароли до 72 байт.
+bcrypt>=4.1.0,<6.0
 python-multipart>=0.0.6
 email-validator>=2.1.0
 cryptography>=42.0.0

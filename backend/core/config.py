@@ -1,26 +1,27 @@
 """
-Application configuration with environment variables support.
+Конфигурация приложения. Все значения приходят из переменных окружения
+(docker-compose.prod.yml передаёт их контейнеру из .env).
 """
 from functools import lru_cache
-from typing import Optional, List
+from typing import List, Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables."""
-    
+    """Настройки приложения."""
+
     model_config = SettingsConfigDict(
         case_sensitive=True,
         extra="ignore"
     )
 
-    # Application
+    # ---- Приложение ----
     APP_NAME: str = "ProfPay - Учёт плательщиков Профкома"
-    APP_VERSION: str = "1.0.0"
+    APP_VERSION: str = "2.0.0"
     DEBUG: bool = False
 
-    # Database - support both individual params and full URL
+    # ---- База данных ----
     DATABASE_URL: Optional[str] = None
     POSTGRES_HOST: str = "db"
     POSTGRES_PORT: int = 5432
@@ -30,39 +31,64 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        """Get database URL for sync connections."""
         if self.DATABASE_URL:
             return self.DATABASE_URL
-        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        return (
+            f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
 
-    @property
-    def database_url_async(self) -> str:
-        """Get database URL for async connections."""
-        base = self.database_url
-        if base.startswith("postgresql://"):
-            return base.replace("postgresql://", "postgresql+asyncpg://", 1)
-        return base
-
-    # Initial admin account (created on first launch if no admin exists)
+    # ---- Первый администратор ----
     ADMIN_USERNAME: str = "admin"
-    ADMIN_PASSWORD: str = "admin123"  # Override in .env before first launch!
+    ADMIN_EMAIL: str = "admin@profpay.site"
+    ADMIN_PASSWORD: str = "admin123"  # переопределить в .env до первого запуска
 
-    # JWT Authentication
+    # ---- JWT ----
     SECRET_KEY: str = "your-super-secret-key-change-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # Security - pydantic-settings auto-parses JSON for List[str]
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173"]
+    # ---- Шифрование полей ----
+    # Ключ Fernet в base64. Сгенерировать:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # Раньше ключ был завёрнут в пароль администратора — из-за этого нельзя было
+    # ни восстановить пароль по почте, ни завести второго пользователя, не сломав
+    # данные. Теперь ключ живёт в окружении, отдельно от базы.
+    ENCRYPTION_KEY: Optional[str] = None
+
+    # ---- Защита входа ----
+    MAX_LOGIN_ATTEMPTS: int = 5          # попыток до блокировки учётной записи
+    LOGIN_LOCKOUT_MINUTES: int = 15      # на сколько блокируем
+    LOGIN_IP_ATTEMPTS: int = 20          # попыток с одного IP за окно
+    LOGIN_IP_WINDOW_MINUTES: int = 15
+
+    # ---- Восстановление пароля по почте ----
+    PASSWORD_RESET_TTL_MINUTES: int = 30
+    PUBLIC_URL: str = "https://profpay.site"
+
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM: Optional[str] = None
+    SMTP_STARTTLS: bool = True
+
+    @property
+    def email_enabled(self) -> bool:
+        """Настроена ли отправка почты. Без неё восстановление пароля недоступно."""
+        return bool(self.SMTP_HOST and self.SMTP_FROM)
+
+    # ---- Безопасность HTTP ----
+    CORS_ORIGINS: List[str] = ["http://localhost:5173"]
     COOKIE_SECURE: bool = False
     COOKIE_HTTPONLY: bool = True
     COOKIE_SAMESITE: str = "lax"
+    TRUSTED_HOSTS: List[str] = ["*"]
 
 
 @lru_cache()
 def get_settings() -> Settings:
-    """Get cached settings instance."""
     return Settings()
 
 

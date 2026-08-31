@@ -1,0 +1,90 @@
+/*
+  Классическое оформление — прежний плоский вид ProfPay.
+
+  Файл подключается только когда его включили в настройках
+  (см. theme/ThemeContext.tsx). Vite выносит его в отдельный кусок сборки,
+  поэтому у тех, кто пользуется новым видом, он не скачивается вовсе.
+
+  Всё внутри .classic-skin: класс ставится на <html>, поэтому правила
+  перебивают токены Radix только при включённом варианте, а выключение
+  возвращает обычный вид без перезагрузки страницы.
+
+  Тёмный вид тоже поддержан: цвета переопределяются через те же токены,
+  которые подменяет Radix, — иначе переключатель темы ломался бы.
+*/
+
+/*
+  Переменные задаются на .radix-themes, а не на <html>: Radix Themes объявляет
+  их именно там, и собственное объявление элемента выигрывает у унаследованного
+  от предка. Поэтому перебиваем на том же элементе.
+*/
+.classic-skin .radix-themes {
+  /* Прежний акцент: более тёмный и глухой зелёный. */
+  --accent-9:  #0f7a6e;
+  --accent-10: #0b5d54;
+  --accent-11: #0b5d54;
+  --accent-a3: #eef6f4;
+  --accent-a4: #d7eae6;
+  --accent-contrast: #ffffff;
+
+  /* Прежние радиусы: почти прямые углы вместо скруглённых. */
+  --radius-1: 3px;
+  --radius-2: 4px;
+  --radius-3: 5px;
+  --radius-4: 6px;
+  --radius-5: 6px;
+  --radius-6: 8px;
+}
+
+.classic-skin .radix-themes:where(.dark, .dark-theme) {
+  --accent-9:  #149385;
+  --accent-10: #1aa896;
+  --accent-11: #4fc4b2;
+  --accent-a3: rgba(20, 147, 133, 0.14);
+  --accent-a4: rgba(20, 147, 133, 0.2);
+}
+
+/* Плотнее: прежняя вёрстка была рассчитана на большее число строк на экране. */
+.classic-skin .card,
+.classic-skin .card-flush,
+.classic-skin .card-interactive {
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.classic-skin .card-flush { padding: 0; }
+
+.classic-skin .btn {
+  border-radius: 5px;
+  min-height: 36px;
+  font-weight: 500;
+}
+
+.classic-skin .input {
+  border-radius: 5px;
+  min-height: 36px;
+}
+
+.classic-skin .badge { border-radius: 2px; }
+
+.classic-skin .sidebar-link,
+.classic-skin .sidebar-link-active {
+  border-radius: 5px;
+  min-height: 38px;
+}
+
+/* Прежние заголовки — без увеличенного межстрочного интервала Radix. */
+.classic-skin h1,
+.classic-skin h2,
+.classic-skin h3 {
+  letter-spacing: -0.011em;
+}
+
+/* Компоненты Radix Themes тоже подтягиваем к прежней геометрии, иначе
+   в классическом виде получалась бы смесь скруглений. */
+.classic-skin .rt-BaseButton,
+.classic-skin .rt-TextFieldRoot,
+.classic-skin .rt-SelectTrigger,
+.classic-skin .rt-Card {
+  border-radius: 5px;
+}

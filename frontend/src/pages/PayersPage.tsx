@@ -4,19 +4,26 @@ import type { Payer, Faculty, PaymentStatus } from '../types';
 import { payerApi, facultyApi, exportApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
-// Status Badge — только 2 рабочих статуса
+/**
+ * Метка статуса.
+ *
+ * «Частично» показывается отдельно: статус наконец выставляется по-настоящему
+ * (взнос за один семестр из двух), и сваливать его в «не оплачено» значит
+ * скрывать от бухгалтера, что человек уже платил.
+ */
 function StatusBadge({ status }: { status: PaymentStatus }) {
-  if (status === 'paid') {
-    return <span className="badge-success">Оплачено</span>;
-  }
-  // partial, unpaid, exempt — всё что не paid считаем "не оплачено" для отображения
-  if (status === 'exempt') {
-    return <span className="badge-info">Освобождён</span>;
-  }
+  if (status === 'paid') return <span className="badge-success">Оплачено</span>;
+  if (status === 'partial') return <span className="badge-warning">Частично</span>;
+  if (status === 'exempt') return <span className="badge-info">Освобождён</span>;
   return <span className="badge-danger">Не оплачено</span>;
 }
 
-export default function PayersPage() {
+interface PayersPageProps {
+  /** С каким режимом архива открывать страницу. Маршрут /archive передаёт 'archived'. */
+  defaultArchive?: 'active' | 'archived' | 'all';
+}
+
+export default function PayersPage({ defaultArchive = 'active' }: PayersPageProps) {
   const [payers, setPayers] = useState<Payer[]>([]);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [total, setTotal] = useState(0);
@@ -32,6 +39,7 @@ export default function PayersPage() {
   const facultyId = searchParams.get('faculty') ? parseInt(searchParams.get('faculty')!) : undefined;
   const status = searchParams.get('status') as PaymentStatus | undefined;
   const search = searchParams.get('search') || '';
+  const archiveMode = (searchParams.get('archive') || defaultArchive) as 'active' | 'archived' | 'all';
 
   useEffect(() => {
     loadFilters();
@@ -39,7 +47,7 @@ export default function PayersPage() {
 
   useEffect(() => {
     loadPayers();
-  }, [page, facultyId, status, search]);
+  }, [page, facultyId, status, search, archiveMode]);
 
   const loadFilters = async () => {
     try {
@@ -59,6 +67,7 @@ export default function PayersPage() {
         faculty_id: facultyId,
         status,
         search: search || undefined,
+        archive: archiveMode,
       });
       setPayers(response.items);
       setTotal(response.total);
@@ -72,6 +81,8 @@ export default function PayersPage() {
 
   const updateFilter = (key: string, value: string | undefined) => {
     const newParams = new URLSearchParams(searchParams);
+    // 'active' — значение по умолчанию, в URL его держать незачем
+    if (key === 'archive' && value === defaultArchive) value = undefined;
     if (value) {
       newParams.set(key, value);
     } else {
@@ -95,7 +106,9 @@ export default function PayersPage() {
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      await exportApi.exportPayersExcel({ faculty_id: facultyId, status, search: search || undefined });
+      await exportApi.exportPayersExcel({
+        faculty_id: facultyId, status, search: search || undefined, archive: archiveMode,
+      });
     } catch (error) {
       console.error('Export failed:', error);
     } finally {
@@ -113,7 +126,9 @@ export default function PayersPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-dark">Плательщики</h1>
+          <h1 className="text-xl md:text-2xl font-semibold text-dark">
+            {defaultArchive === 'archived' ? 'Архив выпускников' : 'Плательщики'}
+          </h1>
           <p className="text-accent mt-1">Всего: {total} записей</p>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
@@ -143,7 +158,7 @@ export default function PayersPage() {
           <div className="sm:col-span-2">
             <input
               type="text"
-              placeholder="Поиск по ФИО, email, телефону..."
+              placeholder="Поиск по фамилии, группе, кафедре"
               value={search}
               onChange={(e) => updateFilter('search', e.target.value)}
               className="input"
@@ -172,7 +187,19 @@ export default function PayersPage() {
           >
             <option value="">Все статусы</option>
             <option value="paid">Оплачено</option>
+            <option value="partial">Частично</option>
             <option value="unpaid">Не оплачено</option>
+          </select>
+
+          {/* Архив: выпустившиеся по умолчанию скрыты */}
+          <select
+            value={archiveMode}
+            onChange={(e) => updateFilter('archive', e.target.value)}
+            className="input"
+          >
+            <option value="active">Без архива</option>
+            <option value="archived">Только архив</option>
+            <option value="all">Все, включая архив</option>
           </select>
         </div>
       </div>
@@ -194,19 +221,24 @@ export default function PayersPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-light-dark">
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider">ФИО</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider">Деректорат</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider">Группа</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider">Курс</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider">Д. рождения</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider">Статус</th>
-                    <th className="text-right py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider">Оплачено</th>
-                    <th className="text-right py-3 px-4 text-xs font-semibold text-accent/70 uppercase tracking-wider"></th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-accent-light uppercase tracking-wider">ФИО</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-accent-light uppercase tracking-wider">Деректорат</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-accent-light uppercase tracking-wider">Группа</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-accent-light uppercase tracking-wider">Курс</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-accent-light uppercase tracking-wider">Д. рождения</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-accent-light uppercase tracking-wider">Статус</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-accent-light uppercase tracking-wider">Оплачено</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-accent-light uppercase tracking-wider"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {payers.map((payer) => (
-                    <tr key={payer.id} className="border-b border-light-dark/50 last:border-0 table-row-interactive">
+                    <tr
+                      key={payer.id}
+                      className={`border-b border-line last:border-0 table-row-interactive ${
+                        payer.is_archived ? 'row-archived' : ''
+                      }`}
+                    >
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
                           <Link
@@ -215,6 +247,14 @@ export default function PayersPage() {
                           >
                             {payer.full_name}
                           </Link>
+                          {payer.is_archived && (
+                            <span
+                              className="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-medium"
+                              title="Срок обучения вышел"
+                            >
+                              Архив
+                            </span>
+                          )}
                           {payer.is_budget && (
                             <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium" title="Бюджетник">Б</span>
                           )}
@@ -224,8 +264,8 @@ export default function PayersPage() {
                         )}
                       </td>
                       <td className="py-3 px-4 text-accent">{getFacultyName(payer.faculty_id)}</td>
-                      <td className="py-3 px-4 text-accent font-medium">{payer.group_name || '—'}</td>
-                      <td className="py-3 px-4 text-accent">{payer.course || '—'}</td>
+                      <td className="py-3 px-4 font-mono text-sm whitespace-nowrap">{payer.group_code || payer.group_name || '—'}</td>
+                      <td className="py-3 px-4 text-accent">{payer.is_archived ? '—' : payer.course || '—'}</td>
                       <td className="py-3 px-4 text-accent">{formatDate(payer.date_of_birth)}</td>
                       <td className="py-3 px-4">
                         <StatusBadge status={payer.status} />
@@ -253,7 +293,9 @@ export default function PayersPage() {
                 <Link
                   key={payer.id}
                   to={`/payers/${payer.id}`}
-                  className="block p-4 bg-light/60 rounded-xl active:bg-light-dark/40 transition-all duration-150 hover:shadow-soft"
+                  className={`block p-3 border border-light-dark rounded transition-colors duration-100 hover:border-accent-light ${
+                    payer.is_archived ? 'row-archived' : 'bg-white'
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="min-w-0 flex-1">
@@ -270,8 +312,10 @@ export default function PayersPage() {
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-accent">
                       {getFacultyName(payer.faculty_id)}
-                      {payer.group_name && ` • ${payer.group_name}`}
-                      {payer.course && ` • ${payer.course} курс`}
+                      {(payer.group_code || payer.group_name) && ` • ${payer.group_code || payer.group_name}`}
+                      {payer.is_archived
+                        ? ' • архив'
+                        : payer.course ? ` • ${payer.course} курс` : ''}
                       {payer.date_of_birth && ` • д.р. ${formatDate(payer.date_of_birth)}`}
                     </span>
                     <span className="font-medium text-dark">{formatMoney(payer.total_paid)}</span>
@@ -284,7 +328,7 @@ export default function PayersPage() {
 
         {/* Pagination */}
         {pages > 1 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-light-dark/50">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-line">
             <p className="text-sm text-accent order-2 sm:order-1">
               Страница {page} из {pages}
             </p>

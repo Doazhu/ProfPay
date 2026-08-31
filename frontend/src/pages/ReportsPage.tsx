@@ -114,7 +114,7 @@ export default function ReportsPage() {
               : '0%'}
           </p>
         </div>
-        <div className="card text-center bg-primary/5 border-primary/20">
+        <div className="card text-center bg-primary-50 border-primary-light">
           <p className="text-xs md:text-sm text-primary">Собрано</p>
           <p className="text-lg md:text-xl lg:text-2xl font-bold text-primary mt-1 md:mt-2">
             {formatMoneyCompact(stats?.total_paid_amount || 0)}
@@ -180,7 +180,7 @@ export default function ReportsPage() {
               ? (faculty.paid_count / faculty.total_payers) * 100
               : 0;
             return (
-              <div key={faculty.faculty_id} className="p-3 bg-light-dark/30 rounded-lg">
+              <div key={faculty.faculty_id} className="p-3 bg-light-dark rounded-lg">
                 <div className="flex items-center justify-between mb-2">
                   <p className="font-medium text-dark">{faculty.faculty_name}</p>
                   <span className="text-sm font-medium text-primary">{formatMoneyCompact(faculty.total_amount)}</span>
@@ -270,7 +270,7 @@ export default function ReportsPage() {
                 const maxAmount = Math.max(...monthlyStats.map(m => m.total_amount));
                 const barWidth = maxAmount > 0 ? (month.total_amount / maxAmount) * 100 : 0;
                 return (
-                  <div key={month.month} className="p-3 bg-light-dark/30 rounded-lg">
+                  <div key={month.month} className="p-3 bg-light-dark rounded-lg">
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-medium text-dark">{getMonthNameShort(month.month)}</span>
                       <span className="text-sm text-accent">{month.payments_count} платежей</span>
