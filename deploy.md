@@ -259,24 +259,103 @@ curl -s http://127.0.0.1:8020/api/v1/health
 
 ### Переход на частичное шифрование
 
-Делается один раз при обновлении со старой версии, где было зашифровано всё.
-Приложение не стартует на старой схеме и подскажет эту команду.
+Делается **один раз** при обновлении со старой версии, где было зашифровано
+всё. Приложение не стартует на старой схеме и само подскажет команду.
+
+Что произойдёт с данными:
+
+| Было | Станет |
+|---|---|
+| ФИО, группа, кафедра — шифротекст | открыто, с индексами (поиск и сортировка в SQL) |
+| Суммы платежей и стипендии — шифротекст | числа (итоги считаются одним `SUM`) |
+| Почта, телефон, Telegram, ВК, дата рождения, примечания | остаются зашифрованными, но новым ключом |
+| Ключ завёрнут в пароль администратора | ключ в `ENCRYPTION_KEY` |
+| Курс — число в колонке | год поступления, курс вычисляется |
+| Поля с двойным шифрованием (след старой ошибки) | восстанавливаются |
+
+Прогон на копии боевой схемы показал: данные переносятся целиком, включая
+записи, испорченные двойным шифрованием, статусы оплаты не задеваются,
+повторный запуск безопасен («База уже переведена — делать нечего»).
+
+**1. Ключ.** До обновления допишите в `.env` на сервере:
 
 ```bash
-docker exec profpay-db pg_dump -U profpay_user -Fc profpay_db > backups/before_migration.dump
+python3 -c "from cryptography.fernet import Fernet; print('ENCRYPTION_KEY=' + Fernet.generate_key().decode())"
+```
 
-# посмотреть, что будет сделано — ничего не меняет
+Без него приложение не стартует, а миграция откажется работать.
+
+**2. Бэкап.** Обязательно, миграция меняет типы колонок:
+
+```bash
+cd /var/www/ProfPay
+mkdir -p backups
+docker exec profpay-db pg_dump -U profpay_user -Fc profpay_db > backups/before_migration.dump
+ls -lh backups/before_migration.dump    # убедитесь, что файл не пустой
+```
+
+**3. Код и остановка приложения.** Останавливаем только backend — база должна
+остаться поднятой, миграция ходит в неё:
+
+```bash
+git pull
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml stop backend frontend
+```
+
+**4. Просмотр.** Ничего не меняет, только показывает, что прочиталось:
+
+```bash
 docker compose -f docker-compose.prod.yml run --rm backend \
   python -m backend.tools.migrate_partial_encryption
+```
 
-# выполнить
+Спросит пароль администратора — им разворачивается старый ключ. В выводе
+должна быть строка вида «первая запись читается как «Гом Павел», группа
+«1-мд-10»». Если вместо фамилии шифротекст — пароль не тот, **не продолжайте**.
+
+**5. Применение.** Идёт одной транзакцией: при ошибке база останется как была.
+
+```bash
 docker compose -f docker-compose.prod.yml run --rm backend \
   python -m backend.tools.migrate_partial_encryption --apply
 ```
 
-Работает в одной транзакции: при ошибке база останется как была. Заодно
-снимает лишние слои шифрования с полей, испорченных прежней ошибкой
-в сохранении карточки.
+**6. Запуск и проверка.**
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml logs --tail=30 backend
+```
+
+Ждём `ProfPay 2.0.0 запущен`. Затем откройте список плательщиков: ФИО,
+группы и суммы на месте, в карточке видны телефон и почта.
+
+**7. После миграции.** Год поступления восстановлен из старого курса,
+уровень образования всем проставлен «бакалавриат». Проверьте и поправьте:
+
+```bash
+docker exec profpay-db psql -U profpay_user -d profpay_db \
+  -c "SELECT id, last_name, course AS старый_курс, admission_year, education_level FROM payers ORDER BY id"
+```
+
+Магистрантам и специалистам уровень нужно поменять в карточке — от него
+зависит, когда человек уйдёт в архив.
+
+### Если что-то пошло не так
+
+Откат на дамп из шага 2:
+
+```bash
+docker compose -f docker-compose.prod.yml stop backend frontend
+docker exec -i profpay-db pg_restore -U profpay_user -d profpay_db --clean --if-exists \
+  < backups/before_migration.dump
+git checkout <предыдущий-коммит>
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Старый код читает старую базу — она не менялась, пока миграция не прошла
+целиком.
 
 ---
 
