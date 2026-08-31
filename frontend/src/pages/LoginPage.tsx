@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react';
-import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { extractErrorMessage } from '../services/api';
 import { safeRedirectPath } from '../utils/navigation';
@@ -7,10 +7,15 @@ import { safeRedirectPath } from '../utils/navigation';
 export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  // Поле кода появляется только после того, как сервер его потребовал:
+  // до входа мы не знаем, включён ли у человека второй фактор, и спрашивать
+  // код у всех подряд было бы лишним шагом.
+  const [totpCode, setTotpCode] = useState('');
+  const [totpRequired, setTotpRequired] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const { login } = useAuth();
+  const { login, needsTotp } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -26,9 +31,18 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      await login({ username, password });
+      await login({ username, password, totp_code: totpCode || undefined });
       navigate(from, { replace: true });
     } catch (err) {
+      if (needsTotp(err)) {
+        setTotpRequired(true);
+        // Первый раз код ещё не спрашивали — не пугаем сообщением об ошибке.
+        if (!totpCode) {
+          setError('');
+          setIsLoading(false);
+          return;
+        }
+      }
       // Сообщение с сервера полезнее общей фразы: в нём остаток попыток
       // и время блокировки.
       setError(extractErrorMessage(err, 'Неверный логин или пароль'));
@@ -87,9 +101,9 @@ export default function LoginPage() {
                 <label htmlFor="password" className="block text-sm font-medium text-accent">
                   Пароль
                 </label>
-                <Link to="/forgot-password" className="text-xs text-primary hover:text-primary-dark">
-                  Забыли пароль?
-                </Link>
+                <span className="text-xs text-accent-light" title="Пароль восстанавливает администратор в разделе «Пользователи»">
+                  Забыли? — к администратору
+                </span>
               </div>
               <input
                 id="password"
@@ -102,6 +116,30 @@ export default function LoginPage() {
                 autoComplete="current-password"
               />
             </div>
+
+            {totpRequired && (
+              <div>
+                <label htmlFor="totp" className="block text-sm font-medium text-accent mb-1">
+                  Код из приложения
+                </label>
+                <input
+                  id="totp"
+                  type="text"
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value)}
+                  className="input"
+                  placeholder="000000"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={20}
+                  autoFocus
+                  style={{ letterSpacing: '0.15em' }}
+                />
+                <p className="hint">
+                  Шестизначный код из Google Authenticator или резервный вида «abcd-efgh»
+                </p>
+              </div>
+            )}
 
             <button
               type="submit"

@@ -10,8 +10,6 @@ import ErrorBoundary from './components/ErrorBoundary';
 import Layout from './components/Layout';
 
 import LoginPage from './pages/LoginPage';
-import ForgotPasswordPage from './pages/ForgotPasswordPage';
-import ResetPasswordPage from './pages/ResetPasswordPage';
 import DashboardPage from './pages/DashboardPage';
 import PayersPage from './pages/PayersPage';
 import PayerDetailPage from './pages/PayerDetailPage';
@@ -68,10 +66,9 @@ export default function App() {
               <ErrorBoundary>
                 <Suspense fallback={<PageFallback />}>
                   <Routes>
-                    {/* Открытые страницы */}
+                    {/* Открытая страница ровно одна: восстановление пароля
+                        по почте убрано в пользу второго фактора. */}
                     <Route path="/login" element={<LoginPage />} />
-                    <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-                    <Route path="/reset-password" element={<ResetPasswordPage />} />
 
                     {/* Всё остальное — только после входа */}
                     <Route

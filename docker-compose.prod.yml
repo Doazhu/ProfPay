@@ -58,25 +58,22 @@ services:
       # Защита входа
       MAX_LOGIN_ATTEMPTS: ${MAX_LOGIN_ATTEMPTS:-5}
       LOGIN_LOCKOUT_MINUTES: ${LOGIN_LOCKOUT_MINUTES:-15}
-      # Восстановление пароля по почте (необязательно)
       PUBLIC_URL: ${PUBLIC_URL:-https://profpay.site}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM: ${SMTP_FROM:-}
-      CORS_ORIGINS: '["https://profpay.site"]'
-      TRUSTED_HOSTS: '["profpay.site","localhost"]'
-      COOKIE_SECURE: "true"
-      COOKIE_SAMESITE: "lax"
-      DEBUG: "false"
+      CORS_ORIGINS: ${CORS_ORIGINS:-["https://profpay.site"]}
+      TRUSTED_HOSTS: ${TRUSTED_HOSTS:-["profpay.site","localhost","127.0.0.1"]}
+      # По умолчанию true — на боевом сервере иначе нельзя. Для локальной
+      # проверки по HTTP переопределяется в .env: браузер не сохранит
+      # secure-куку без HTTPS, и вход зациклится.
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
+      DEBUG: ${DEBUG:-false}
     depends_on:
       db:
         condition: service_healthy
     expose:
       - "8000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/api/v1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -109,7 +106,10 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      # Явный 127.0.0.1, а не localhost: внутри контейнера имя резолвится
+      # в IPv6 [::1], nginx слушает только IPv4, и busybox-wget (в отличие
+      # от curl) не откатывается на IPv4 — контейнер вечно был unhealthy.
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:80/"]
       interval: 30s
       timeout: 10s
       retries: 3

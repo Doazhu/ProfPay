@@ -12,4 +12,9 @@ bcrypt>=4.1.0,<6.0
 python-multipart>=0.0.6
 email-validator>=2.1.0
 cryptography>=42.0.0
+# Двухфакторная аутентификация через приложение-аутентификатор (TOTP, RFC 6238).
+pyotp>=2.9.0
+# QR-код для привязки приложения. Чистый Python без зависимостей, рисует SVG —
+# так не нужна JS-библиотека на фронте и не слабеет Content-Security-Policy.
+segno>=1.6.0
 openpyxl>=3.1.0

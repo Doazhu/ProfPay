@@ -3,9 +3,11 @@ import { Link, useSearchParams } from 'react-router-dom';
 import type { Payer, Faculty, PaymentStatus } from '../types';
 import { payerApi, facultyApi } from '../services/api';
 
-// Status Badge — только не оплачено
+/** Метка статуса — та же, что в списке плательщиков, иначе один человек
+ *  на двух страницах выглядел бы по-разному. */
 function StatusBadge({ status }: { status: PaymentStatus }) {
   if (status === 'paid') return <span className="badge-success">Оплачено</span>;
+  if (status === 'partial') return <span className="badge-warning">Частично</span>;
   return <span className="badge-danger">Не оплачено</span>;
 }
 

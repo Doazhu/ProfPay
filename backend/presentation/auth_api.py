@@ -14,25 +14,24 @@ import logging
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
-from typing import Deque, Dict, Optional
+from typing import Deque, Dict, List, Optional
 
-from fastapi import (
-    APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status,
-)
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from backend.application.schemas import (
-    AdminPasswordReset, LoginRequest, PasswordChange, PasswordResetConfirm,
-    PasswordResetRequest, TokenResponse, UserCreate, UserResponse, UserUpdate,
+    AdminPasswordReset, LoginRequest, PasswordChange, TokenResponse,
+    TotpDisableRequest, TotpEnableRequest, TotpEnableResponse, TotpSetupResponse,
+    TotpStatus, UserCreate, UserResponse, UserUpdate,
 )
 from backend.core.config import settings
 from backend.core.database import get_db
-from backend.core.mailer import send_password_reset
+from backend.core.encryption import decrypt_field, encrypt_field
 from backend.core.security import (
-    compare_reset_token, create_access_token, create_refresh_token, decode_token,
-    generate_reset_token, get_password_hash, hash_reset_token, needs_rehash,
-    verify_password,
+    create_access_token, create_refresh_token, decode_token, get_password_hash,
+    needs_rehash, verify_password,
 )
+from backend.core import totp as totp_service
 from backend.domain.models import SystemUser, UserRole
 from backend.infrastructure.repositories import AuditRepository, UserRepository
 from backend.presentation.dependencies import (
@@ -110,6 +109,52 @@ def _set_auth_cookies(response: Response, access: str, refresh: str) -> None:
     )
 
 
+def _totp_secret(user: SystemUser) -> Optional[str]:
+    """Секрет второго фактора в открытом виде (в базе он зашифрован)."""
+    try:
+        return decrypt_field(user.totp_secret)
+    except Exception:
+        logger.exception("Секрет второго фактора не открывается текущим ключом")
+        return None
+
+
+def _recovery_hashes(user: SystemUser) -> List[str]:
+    try:
+        raw = decrypt_field(user.totp_recovery_hashes)
+    except Exception:
+        return []
+    return [h for h in (raw or "").split(",") if h]
+
+
+def _store_recovery_hashes(user: SystemUser, hashes: List[str]) -> None:
+    user.totp_recovery_hashes = encrypt_field(",".join(hashes)) if hashes else None
+
+
+def _check_second_factor(user: SystemUser, code: Optional[str]) -> bool:
+    """
+    Проверить код второго фактора: сначала из приложения, потом резервный.
+
+    Сработавший резервный код гасится сразу — он одноразовый. Вызывающий
+    обязан сохранить сессию (db.commit), иначе гашение не запишется.
+    """
+    secret = _totp_secret(user)
+    if totp_service.verify_code(secret, code):
+        return True
+
+    if not code:
+        return False
+
+    hashes = _recovery_hashes(user)
+    matched = totp_service.match_recovery_code(code, hashes)
+    if matched is None:
+        return False
+
+    hashes.remove(matched)
+    _store_recovery_hashes(user, hashes)
+    logger.info("Использован резервный код, осталось: %s", len(hashes))
+    return True
+
+
 def _user_response(user: SystemUser) -> dict:
     return {
         "id": user.id,
@@ -121,6 +166,7 @@ def _user_response(user: SystemUser) -> dict:
         "created_at": user.created_at,
         "last_login": user.last_login,
         "is_locked": _is_locked(user),
+        "totp_enabled": bool(user.totp_enabled),
     }
 
 
@@ -192,6 +238,30 @@ async def login(
             detail="Учётная запись отключена",
         )
 
+    # Второй фактор проверяется только после верного пароля: иначе по ответу
+    # можно было бы понять, что пароль угадан, ещё не имея кода.
+    if user.totp_enabled:
+        if not login_data.totp_code:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Нужен код из приложения-аутентификатора",
+                headers={"X-Requires-Totp": "1"},
+            )
+        if not _check_second_factor(user, login_data.totp_code):
+            # Неверный код считается наравне с неверным паролем: иначе
+            # перебор кода не упирался бы в блокировку.
+            user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+            if user.failed_login_attempts >= settings.MAX_LOGIN_ATTEMPTS:
+                user.locked_until = _now() + timedelta(minutes=settings.LOGIN_LOCKOUT_MINUTES)
+                user.failed_login_attempts = 0
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Код неверен или истёк",
+                headers={"X-Requires-Totp": "1"},
+            )
+        db.commit()  # гасим использованный резервный код
+
     # Пароль подошёл по старому формату passlib — пересохраняем в текущем.
     if needs_rehash(login_data.password, user.hashed_password):
         user.hashed_password = get_password_hash(login_data.password)
@@ -250,88 +320,99 @@ async def me(current_user: SystemUser = Depends(get_current_user)):
 
 
 # ---------------------------------------------------------------------------
-# Восстановление пароля по почте
+# Второй фактор: приложение-аутентификатор
 # ---------------------------------------------------------------------------
 
-# Один ответ на любой исход: существует адрес или нет, отправилось письмо
-# или нет. Иначе форма восстановления превращается в способ проверить,
-# заведён ли в системе конкретный человек.
-_RESET_REPLY = {
-    "message": "Если такой адрес есть в системе, письмо со ссылкой уже отправлено. "
-               "Проверьте почту, включая папку «Спам»."
-}
-
-
-@router.post("/password-reset/request")
-async def request_password_reset(
-    data: PasswordResetRequest,
-    background: BackgroundTasks,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    """Запросить ссылку восстановления пароля."""
-    if not settings.email_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Отправка почты не настроена. Обратитесь к администратору — "
-                   "он задаст новый пароль в разделе «Пользователи».",
-        )
-
-    user_repo = UserRepository(db)
-    user = user_repo.get_by_email(data.email)
-
-    if user and user.is_active:
-        token = generate_reset_token()
-        user.reset_token_hash = hash_reset_token(token)
-        user.reset_token_expires = _now() + timedelta(minutes=settings.PASSWORD_RESET_TTL_MINUTES)
-        db.commit()
-
-        # В фоне: время ответа не должно зависеть от того, нашёлся адрес или нет.
-        background.add_task(send_password_reset, user.email, user.full_name, token)
-        AuditRepository(db).record(
-            "password_reset_requested", "user", user.id, user.id, None, client_ip(request)
-        )
-
-    return _RESET_REPLY
-
-
-@router.post("/password-reset/confirm")
-async def confirm_password_reset(
-    data: PasswordResetConfirm,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    """Установить новый пароль по токену из письма."""
-    user_repo = UserRepository(db)
-    user = user_repo.get_by_reset_token_hash(hash_reset_token(data.token))
-
-    token_valid = (
-        user is not None
-        and user.is_active
-        and user.reset_token_expires is not None
-        and _as_aware(user.reset_token_expires) > _now()
-        and compare_reset_token(data.token, user.reset_token_hash)
+@router.get("/totp/status", response_model=TotpStatus)
+async def totp_status(current_user: SystemUser = Depends(get_current_user)):
+    """Включён ли второй фактор и сколько резервных кодов осталось."""
+    return TotpStatus(
+        enabled=bool(current_user.totp_enabled),
+        recovery_codes_left=len(_recovery_hashes(current_user)),
     )
 
-    if not token_valid:
+
+@router.post("/totp/setup", response_model=TotpSetupResponse)
+async def totp_setup(
+    current_user: SystemUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Начать привязку приложения: выдать секрет и QR-код.
+
+    Секрет сразу пишется в базу, но второй фактор ещё не включается — это
+    произойдёт в /totp/enable после того, как человек введёт код и докажет,
+    что приложение действительно настроено. Иначе можно было бы запереть
+    себя, не сохранив секрет.
+    """
+    if current_user.totp_enabled:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Ссылка недействительна или истекла. Запросите восстановление заново.",
+            status.HTTP_400_BAD_REQUEST,
+            "Второй фактор уже включён. Сначала отключите его.",
         )
 
-    user.hashed_password = get_password_hash(data.new_password)
-    # Токен одноразовый: гасим сразу, чтобы по той же ссылке нельзя было
-    # сменить пароль второй раз.
-    user.reset_token_hash = None
-    user.reset_token_expires = None
-    user.failed_login_attempts = 0
-    user.locked_until = None
+    secret = totp_service.generate_secret()
+    current_user.totp_secret = encrypt_field(secret)
+    db.commit()
+
+    account = current_user.email or current_user.username
+    return TotpSetupResponse(
+        secret=secret,
+        qr_svg=totp_service.qr_svg(secret, account),
+        account=account,
+    )
+
+
+@router.post("/totp/enable", response_model=TotpEnableResponse)
+async def totp_enable(
+    data: TotpEnableRequest,
+    request: Request,
+    current_user: SystemUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Подтвердить привязку кодом и включить второй фактор."""
+    secret = _totp_secret(current_user)
+    if not secret:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Сначала начните привязку приложения")
+    if not totp_service.verify_code(secret, data.code):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Код неверен. Проверьте время на телефоне.")
+
+    codes = totp_service.generate_recovery_codes()
+    _store_recovery_hashes(current_user, [totp_service.hash_recovery_code(c) for c in codes])
+    current_user.totp_enabled = True
     db.commit()
 
     AuditRepository(db).record(
-        "password_reset", "user", user.id, user.id, None, client_ip(request)
+        "totp_enabled", "user", current_user.id, current_user.id, None, client_ip(request)
     )
-    return {"message": "Пароль изменён. Теперь войдите с новым паролем."}
+    # Коды показываются ровно один раз: дальше в базе только их хеши.
+    return TotpEnableResponse(recovery_codes=codes)
+
+
+@router.post("/totp/disable")
+async def totp_disable(
+    data: TotpDisableRequest,
+    request: Request,
+    current_user: SystemUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Отключить второй фактор — под пароль и действующий код."""
+    if not current_user.totp_enabled:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Второй фактор не включён")
+    if not verify_password(data.password, current_user.hashed_password):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Пароль неверен")
+    if not _check_second_factor(current_user, data.code):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Код неверен или истёк")
+
+    current_user.totp_enabled = False
+    current_user.totp_secret = None
+    current_user.totp_recovery_hashes = None
+    db.commit()
+
+    AuditRepository(db).record(
+        "totp_disabled", "user", current_user.id, current_user.id, None, client_ip(request)
+    )
+    return {"message": "Второй фактор отключён"}
 
 
 @router.post("/change-password")
@@ -351,6 +432,15 @@ async def change_password(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Новый пароль совпадает с текущим",
+        )
+
+    # Смена пароля тоже подтверждается кодом: без этого перехваченная сессия
+    # позволила бы сменить пароль в обход второго фактора и закрепиться.
+    if current_user.totp_enabled and not _check_second_factor(current_user, data.totp_code):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Код из приложения неверен или истёк",
+            headers={"X-Requires-Totp": "1"},
         )
 
     current_user.hashed_password = get_password_hash(data.new_password)
@@ -479,8 +569,6 @@ async def admin_set_password(
     user.hashed_password = get_password_hash(data.new_password)
     user.failed_login_attempts = 0
     user.locked_until = None
-    user.reset_token_hash = None
-    user.reset_token_expires = None
     user_repo.save(user)
 
     AuditRepository(db).record(
@@ -488,6 +576,37 @@ async def admin_set_password(
         f"Администратор задал пароль для {user.username}", client_ip(request),
     )
     return {"message": f"Пароль для «{user.username}» изменён"}
+
+
+@router.post("/users/{user_id}/totp/reset")
+async def admin_reset_totp(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: SystemUser = Depends(require_admin),
+):
+    """
+    Сбросить второй фактор пользователю — когда телефон потерян,
+    а резервные коды не сохранились.
+
+    Отдельно от сброса пароля намеренно: смена пароля не должна молча
+    отключать второй фактор, иначе он перестаёт что-либо защищать.
+    """
+    user_repo = UserRepository(db)
+    user = user_repo.get_by_id(user_id)
+    if not user:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
+
+    user.totp_enabled = False
+    user.totp_secret = None
+    user.totp_recovery_hashes = None
+    user_repo.save(user)
+
+    AuditRepository(db).record(
+        "totp_reset", "user", user.id, current_user.id,
+        f"Администратор сбросил второй фактор для {user.username}", client_ip(request),
+    )
+    return {"message": f"Второй фактор для «{user.username}» сброшен"}
 
 
 @router.post("/users/{user_id}/unlock")

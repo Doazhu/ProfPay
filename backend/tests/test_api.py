@@ -95,61 +95,6 @@ def test_protected_endpoint_requires_auth(client):
 
 
 # ---------------------------------------------------------------------------
-# Восстановление пароля
-# ---------------------------------------------------------------------------
-
-def test_password_reset_unavailable_without_smtp(client, admin):
-    """Пока почта не настроена — честная ошибка, а не молчаливая пустота."""
-    response = client.post(f"{API}/auth/password-reset/request",
-                           json={"email": "admin@profpay.site"})
-    assert response.status_code == 503
-
-
-def test_password_reset_flow(client, admin, db, monkeypatch):
-    monkeypatch.setattr(settings, "SMTP_HOST", "smtp.example.org")
-    monkeypatch.setattr(settings, "SMTP_FROM", "noreply@profpay.site")
-
-    sent = {}
-    monkeypatch.setattr(
-        "backend.presentation.auth_api.send_password_reset",
-        lambda to, name, token: sent.update(to=to, token=token) or True,
-    )
-
-    response = client.post(f"{API}/auth/password-reset/request",
-                           json={"email": "admin@profpay.site"})
-    assert response.status_code == 200
-    assert sent["to"] == "admin@profpay.site"
-
-    confirm = client.post(f"{API}/auth/password-reset/confirm",
-                          json={"token": sent["token"], "new_password": "НовыйПароль2026"})
-    assert confirm.status_code == 200
-
-    assert client.post(f"{API}/auth/login",
-                       json={"username": "admin", "password": "НовыйПароль2026"}).status_code == 200
-
-    # Токен одноразовый.
-    reuse = client.post(f"{API}/auth/password-reset/confirm",
-                        json={"token": sent["token"], "new_password": "ЕщёОдин2026"})
-    assert reuse.status_code == 400
-
-
-def test_password_reset_hides_unknown_email(client, admin, monkeypatch):
-    monkeypatch.setattr(settings, "SMTP_HOST", "smtp.example.org")
-    monkeypatch.setattr(settings, "SMTP_FROM", "noreply@profpay.site")
-
-    known = client.post(f"{API}/auth/password-reset/request", json={"email": "admin@profpay.site"})
-    unknown = client.post(f"{API}/auth/password-reset/request", json={"email": "нет@profpay.site"})
-    assert known.status_code == unknown.status_code == 200
-    assert known.json() == unknown.json()
-
-
-def test_bad_reset_token_rejected(client, admin):
-    response = client.post(f"{API}/auth/password-reset/confirm",
-                           json={"token": "x" * 40, "new_password": "НовыйПароль2026"})
-    assert response.status_code == 400
-
-
-# ---------------------------------------------------------------------------
 # Плательщики
 # ---------------------------------------------------------------------------
 

@@ -10,7 +10,8 @@ export interface User {
   is_active: boolean;
   created_at: string;
   last_login: string | null;
-  is_locked: boolean;   // вход заблокирован после серии неудачных попыток
+  is_locked: boolean;      // вход заблокирован после серии неудачных попыток
+  totp_enabled: boolean;   // включён второй фактор
 }
 
 // Payment status (2 main: paid / unpaid; partial & exempt kept for backend compatibility)
@@ -152,6 +153,20 @@ export interface PaginatedResponse<T> {
 export interface LoginCredentials {
   username: string;
   password: string;
+  /** Код из приложения-аутентификатора либо резервный код «abcd-efgh». */
+  totp_code?: string;
+}
+
+// Второй фактор
+export interface TotpSetup {
+  secret: string;
+  qr_svg: string;
+  account: string;
+}
+
+export interface TotpStatus {
+  enabled: boolean;
+  recovery_codes_left: number;
 }
 
 export interface TokenResponse {

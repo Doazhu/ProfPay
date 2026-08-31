@@ -190,8 +190,9 @@ def _drop_legacy(conn) -> None:
         # Защита входа и восстановление пароля.
         "ALTER TABLE system_users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE system_users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP WITH TIME ZONE",
-        "ALTER TABLE system_users ADD COLUMN IF NOT EXISTS reset_token_hash VARCHAR(64)",
-        "ALTER TABLE system_users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMP WITH TIME ZONE",
+        "ALTER TABLE system_users ADD COLUMN IF NOT EXISTS totp_secret TEXT",
+        "ALTER TABLE system_users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE system_users ADD COLUMN IF NOT EXISTS totp_recovery_hashes TEXT",
         "ALTER TABLE system_users ALTER COLUMN email TYPE VARCHAR(255)",
         # Индексы под новые запросы.
         "CREATE INDEX IF NOT EXISTS ix_payers_fio ON payers (last_name, first_name)",

@@ -73,7 +73,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
           background: 'var(--color-panel-solid)',
           borderRight: '1px solid var(--gray-a5)',
           transform: isDrawer && !isOpen ? 'translateX(-100%)' : 'translateX(0)',
-          transition: 'transform 150ms ease-out',
+          transition: 'transform var(--dur-2) var(--ease)',
         }}
       >
         {/* Шапка */}
@@ -140,14 +140,14 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
               style={{
                 marginLeft: 'auto',
                 transform: moreOpen ? 'rotate(90deg)' : 'none',
-                transition: 'transform 100ms',
+                transition: 'transform var(--dur-1) var(--ease)',
               }}
             />
           </button>
 
           {moreOpen && (
             <Box
-              className="animate-fade-in-fast"
+              className="animate-expand"
               style={{
                 marginLeft: 14, paddingLeft: 8,
                 borderLeft: '1px solid var(--gray-a5)',
@@ -156,7 +156,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
             >
               <NavItem to="/reports" icon={<BarChartIcon />} label="Отчёты" onClick={handleNavClick} />
               <NavItem to="/archive" icon={<ArchiveIcon />} label="Архив выпускников" onClick={handleNavClick} />
-              <NavItem to="/change-password" icon={<LockClosedIcon />} label="Сменить пароль" onClick={handleNavClick} />
+              <NavItem to="/change-password" icon={<LockClosedIcon />} label="Пароль и вход" onClick={handleNavClick} />
               {isAdmin && (
                 <>
                   <NavItem to="/users" icon={<PersonIcon />} label="Пользователи" onClick={handleNavClick} />

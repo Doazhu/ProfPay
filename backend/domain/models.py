@@ -69,10 +69,14 @@ class SystemUser(Base):
     failed_login_attempts = Column(Integer, default=0, nullable=False)
     locked_until = Column(DateTime(timezone=True), nullable=True)
 
-    # Восстановление пароля по почте. В базе только хеш токена: утечка дампа
-    # не должна давать возможность сбросить чужой пароль.
-    reset_token_hash = Column(String(64), nullable=True, index=True)
-    reset_token_expires = Column(DateTime(timezone=True), nullable=True)
+    # Второй фактор: приложение-аутентификатор (TOTP).
+    # Секрет шифруется — по нему генерируются коды, это тот же уровень
+    # чувствительности, что и пароль.
+    totp_secret = Column(Text, nullable=True)          # шифруется
+    totp_enabled = Column(Boolean, default=False, nullable=False)
+    # Резервные коды на случай потери телефона: список хешей через запятую,
+    # сам список тоже шифруется.
+    totp_recovery_hashes = Column(Text, nullable=True)  # шифруется
 
     def __repr__(self):
         return f"<SystemUser {self.username} ({self.role})>"

@@ -63,21 +63,11 @@ class Settings(BaseSettings):
     LOGIN_IP_ATTEMPTS: int = 20          # попыток с одного IP за окно
     LOGIN_IP_WINDOW_MINUTES: int = 15
 
-    # ---- Восстановление пароля по почте ----
-    PASSWORD_RESET_TTL_MINUTES: int = 30
+    # ---- Второй фактор ----
+    # Восстановление пароля по почте убрано: вместо него приложение-
+    # аутентификатор (TOTP), которому не нужен SMTP-сервер. Забытый пароль
+    # сбрасывает другой администратор либо backend/tools/reset_admin.py.
     PUBLIC_URL: str = "https://profpay.site"
-
-    SMTP_HOST: Optional[str] = None
-    SMTP_PORT: int = 587
-    SMTP_USER: Optional[str] = None
-    SMTP_PASSWORD: Optional[str] = None
-    SMTP_FROM: Optional[str] = None
-    SMTP_STARTTLS: bool = True
-
-    @property
-    def email_enabled(self) -> bool:
-        """Настроена ли отправка почты. Без неё восстановление пароля недоступно."""
-        return bool(self.SMTP_HOST and self.SMTP_FROM)
 
     # ---- Безопасность HTTP ----
     CORS_ORIGINS: List[str] = ["http://localhost:5173"]

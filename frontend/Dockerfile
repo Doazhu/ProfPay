@@ -7,12 +7,17 @@ FROM node:20-slim AS deps
 
 WORKDIR /app
 
-# Copy package files first (layer caching)
-COPY package.json package-lock.json* ./
+# Сначала только файлы зависимостей — слой переиспользуется, пока они не менялись.
+COPY package.json package-lock.json ./
 
-# Install all dependencies (including devDependencies needed for build)
-# Fix vulnerabilities automatically
-RUN npm ci && npm audit fix || true
+# npm ci ставит ровно то, что записано в package-lock.json.
+#
+# Здесь раньше стояло `npm ci && npm audit fix || true`. Две проблемы:
+# audit fix менял дерево зависимостей прямо во время сборки, из-за чего образ
+# переставал соответствовать файлу блокировки; а `|| true` глушил падение
+# npm ci, и сборка обваливалась позже с невнятным «node_modules not found».
+# Уязвимости лечим обновлением зависимостей в репозитории, а не при сборке.
+RUN npm ci --no-audit --no-fund
 
 # =============================================================================
 # Stage 2: Builder

@@ -1,0 +1,240 @@
+import { useEffect, useState } from 'react';
+import {
+  CheckCircledIcon, ExclamationTriangleIcon, LockClosedIcon,
+} from '@radix-ui/react-icons';
+import {
+  Badge, Box, Button, Callout, Card, Code, Dialog, Flex, Heading, Text, TextField,
+} from '@radix-ui/themes';
+
+import type { TotpSetup, TotpStatus } from '../types';
+import { authApi, extractErrorMessage } from '../services/api';
+import PasswordField from './PasswordField';
+
+/**
+ * Второй фактор входа через приложение-аутентификатор.
+ *
+ * Привязка идёт в два шага намеренно: сначала сервер выдаёт секрет и QR,
+ * и только после ввода кода фактор включается. Иначе можно было бы включить
+ * его, не успев настроить приложение, и запереть себя.
+ */
+export default function TwoFactorSettings() {
+  const [status, setStatus] = useState<TotpStatus | null>(null);
+  const [setup, setSetup] = useState<TotpSetup | null>(null);
+  const [code, setCode] = useState('');
+  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  // Отключение
+  const [disableOpen, setDisableOpen] = useState(false);
+  const [disablePassword, setDisablePassword] = useState('');
+  const [disableCode, setDisableCode] = useState('');
+
+  const refresh = () => authApi.totpStatus().then(setStatus).catch(() => setStatus(null));
+
+  useEffect(() => { refresh(); }, []);
+
+  const startSetup = async () => {
+    setError('');
+    setBusy(true);
+    try {
+      setSetup(await authApi.totpSetup());
+    } catch (err) {
+      setError(extractErrorMessage(err, 'Не удалось начать привязку'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmSetup = async () => {
+    setError('');
+    setBusy(true);
+    try {
+      setRecoveryCodes(await authApi.totpEnable(code));
+      setSetup(null);
+      setCode('');
+      await refresh();
+    } catch (err) {
+      setError(extractErrorMessage(err, 'Код неверен'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disable = async () => {
+    setError('');
+    setBusy(true);
+    try {
+      await authApi.totpDisable(disablePassword, disableCode);
+      setDisableOpen(false);
+      setDisablePassword('');
+      setDisableCode('');
+      await refresh();
+    } catch (err) {
+      setError(extractErrorMessage(err, 'Не удалось отключить'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /*
+    QR отдаётся картинкой через data:-адрес, а не вставкой разметки.
+    dangerouslySetInnerHTML для этого не нужен, а Content-Security-Policy
+    уже разрешает img-src data: — дыру открывать не пришлось.
+  */
+  const qrSrc = setup
+    ? `data:image/svg+xml;utf8,${encodeURIComponent(setup.qr_svg)}`
+    : null;
+
+  return (
+    <Card size="2" mb="5">
+      <Flex align="center" gap="2" mb="1">
+        <LockClosedIcon />
+        <Heading size="3">Вход по коду из приложения</Heading>
+        {status?.enabled && <Badge color="green">Включён</Badge>}
+      </Flex>
+      <Text as="p" size="1" color="gray" mb="3">
+        Второй фактор: кроме пароля при входе спрашивается шестизначный код
+        из Google Authenticator, Aegis или другого подобного приложения.
+      </Text>
+
+      {error && (
+        <Callout.Root color="red" mb="3">
+          <Callout.Text>{error}</Callout.Text>
+        </Callout.Root>
+      )}
+
+      {/* Резервные коды показываются ровно один раз */}
+      {recoveryCodes && (
+        <Callout.Root color="amber" mb="3">
+          <Callout.Icon><ExclamationTriangleIcon /></Callout.Icon>
+          <Callout.Text>
+            <Text as="p" weight="medium" mb="2">
+              Сохраните резервные коды — больше они не покажутся.
+            </Text>
+            <Flex wrap="wrap" gap="2" mb="2">
+              {recoveryCodes.map((c) => <Code key={c} size="2">{c}</Code>)}
+            </Flex>
+            <Text as="p" size="1">
+              Каждый работает один раз и заменяет код из приложения, если
+              телефон потерян. В базе хранятся только их отпечатки.
+            </Text>
+            <Button size="1" variant="soft" mt="2"
+                    onClick={() => setRecoveryCodes(null)}>
+              Я записал
+            </Button>
+          </Callout.Text>
+        </Callout.Root>
+      )}
+
+      {/* Шаг привязки */}
+      {setup && (
+        <Box mb="3">
+          <Flex gap="4" wrap="wrap" align="start">
+            {qrSrc && (
+              <Box style={{ background: '#fff', padding: 8, borderRadius: 'var(--radius-3)' }}>
+                <img src={qrSrc} alt="QR-код для привязки приложения"
+                     width={168} height={168} />
+              </Box>
+            )}
+            <Box style={{ flex: '1 1 260px' }}>
+              <Text as="p" size="2" mb="2">
+                Отсканируйте код в приложении, затем введите шестизначное число,
+                которое оно покажет.
+              </Text>
+              <Text as="p" size="1" color="gray" mb="1">
+                Если сканировать нечем, добавьте ключ вручную:
+              </Text>
+              <Code size="1" style={{ wordBreak: 'break-all' }}>{setup.secret}</Code>
+
+              <Flex gap="2" mt="3" align="center">
+                <TextField.Root
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="000000"
+                  inputMode="numeric"
+                  maxLength={6}
+                  style={{ width: 120, letterSpacing: '0.15em' }}
+                  aria-label="Код из приложения"
+                />
+                <Button onClick={confirmSetup} disabled={code.length < 6 || busy}>
+                  Включить
+                </Button>
+                <Button variant="ghost" color="gray"
+                        onClick={() => { setSetup(null); setCode(''); }}>
+                  Отмена
+                </Button>
+              </Flex>
+            </Box>
+          </Flex>
+        </Box>
+      )}
+
+      {/* Обычное состояние */}
+      {!setup && status && (
+        status.enabled ? (
+          <Flex align="center" gap="3" wrap="wrap">
+            <Flex align="center" gap="1">
+              <CheckCircledIcon color="var(--green-11)" />
+              <Text size="2">
+                Резервных кодов осталось: <Text weight="medium">{status.recovery_codes_left}</Text>
+              </Text>
+            </Flex>
+            <Button variant="soft" color="red" onClick={() => setDisableOpen(true)}>
+              Отключить
+            </Button>
+          </Flex>
+        ) : (
+          <Button onClick={startSetup} disabled={busy}>
+            {busy ? 'Готовим…' : 'Включить'}
+          </Button>
+        )
+      )}
+
+      <Text as="p" size="1" color="gray" mt="3">
+        Восстановления пароля по почте нет — почтовый сервер для этого не нужен.
+        Если пароль забыт, его задаёт другой администратор в разделе «Пользователи».
+      </Text>
+
+      {/* Отключение: под пароль и действующий код */}
+      <Dialog.Root open={disableOpen} onOpenChange={setDisableOpen}>
+        <Dialog.Content maxWidth="420px">
+          <Dialog.Title>Отключить второй фактор</Dialog.Title>
+          <Dialog.Description size="2" color="gray" mb="4">
+            Вход снова будет защищён только паролем.
+          </Dialog.Description>
+
+          <Flex direction="column" gap="3">
+            <Box>
+              <Text as="label" size="1" weight="medium" color="gray" mb="1"
+                    style={{ display: 'block' }}>
+                Пароль
+              </Text>
+              <PasswordField value={disablePassword} onChange={setDisablePassword}
+                             autoComplete="current-password" />
+            </Box>
+            <Box>
+              <Text as="label" size="1" weight="medium" color="gray" mb="1"
+                    style={{ display: 'block' }}>
+                Код из приложения
+              </Text>
+              <TextField.Root value={disableCode} onChange={(e) => setDisableCode(e.target.value)}
+                              placeholder="000000" inputMode="numeric" maxLength={20}
+                              style={{ width: 140, letterSpacing: '0.15em' }} />
+            </Box>
+          </Flex>
+
+          <Flex gap="3" mt="4" justify="end">
+            <Dialog.Close>
+              <Button variant="soft" color="gray">Отмена</Button>
+            </Dialog.Close>
+            <Button color="red" onClick={disable}
+                    disabled={!disablePassword || disableCode.length < 6 || busy}>
+              Отключить
+            </Button>
+          </Flex>
+        </Dialog.Content>
+      </Dialog.Root>
+    </Card>
+  );
+}

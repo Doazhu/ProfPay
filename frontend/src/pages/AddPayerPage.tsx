@@ -53,6 +53,8 @@ export default function AddPayerPage() {
   const [birthDate, setBirthDate] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [telegram, setTelegram] = useState('');
+  const [vk, setVk] = useState('');
   const [notes, setNotes] = useState('');
 
   // Обучение
@@ -156,6 +158,8 @@ export default function AddPayerPage() {
       date_of_birth: birthDate || undefined,
       email: email.trim() || undefined,
       phone: phone.trim() || undefined,
+      telegram: telegram.trim() || undefined,
+      vk: vk.trim() || undefined,
       faculty_id: facultyId ? Number(facultyId) : undefined,
       group_name: groupName || undefined,
       department: department.trim() || undefined,
@@ -245,15 +249,15 @@ export default function AddPayerPage() {
             <Grid columns={{ initial: '1', sm: '3' }} gap="3">
               <Field label="Фамилия *">
                 <TextField.Root value={lastName} onChange={(e) => setLastName(e.target.value)}
-                                placeholder="Ренёв" required autoFocus />
+                                placeholder="Иванов" required autoFocus />
               </Field>
               <Field label="Имя *">
                 <TextField.Root value={firstName} onChange={(e) => setFirstName(e.target.value)}
-                                placeholder="Александр" required />
+                                placeholder="Иван" required />
               </Field>
               <Field label="Отчество">
                 <TextField.Root value={middleName} onChange={(e) => setMiddleName(e.target.value)}
-                                placeholder="Дмитриевич" />
+                                placeholder="Иванович" />
               </Field>
             </Grid>
 
@@ -265,11 +269,25 @@ export default function AddPayerPage() {
               <Field label="Email">
                 <TextField.Root type="email" value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                placeholder="me@example.com" />
+                                placeholder="ivanov@example.com" />
               </Field>
               <Field label="Телефон">
                 <TextField.Root value={phone} onChange={(e) => setPhone(e.target.value)}
                                 placeholder="+7 900 123-45-67" />
+              </Field>
+            </Grid>
+
+            {/* Мессенджеры — необязательные: у части людей их просто нет,
+                а связаться по ним обычно быстрее, чем звонком. */}
+            <Grid columns={{ initial: '1', sm: '2' }} gap="3" mt="3">
+              <Field label="Telegram" hint={<Text size="1" color="gray">Необязательно</Text>}>
+                <TextField.Root value={telegram}
+                                onChange={(e) => setTelegram(e.target.value)}
+                                placeholder="@Doazhu" maxLength={100} />
+              </Field>
+              <Field label="ВКонтакте" hint={<Text size="1" color="gray">Необязательно</Text>}>
+                <TextField.Root value={vk} onChange={(e) => setVk(e.target.value)}
+                                placeholder="vk.com/doazhu" maxLength={200} />
               </Field>
             </Grid>
           </Card>

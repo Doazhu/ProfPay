@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { DownloadIcon, MagnifyingGlassIcon, PlusIcon } from '@radix-ui/react-icons';
+import {
+  Button, Card, Flex, Heading, Select, Spinner, Text, TextField,
+} from '@radix-ui/themes';
 import type { Payer, Faculty, PaymentStatus } from '../types';
 import { payerApi, facultyApi, exportApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -124,92 +128,83 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
   return (
     <div className="animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+      <Flex direction={{ initial: 'column', sm: 'row' }} align={{ sm: 'center' }}
+            justify="between" gap="3" mb="5">
         <div>
-          <h1 className="text-xl md:text-2xl font-semibold text-dark">
+          <Heading size="6">
             {defaultArchive === 'archived' ? 'Архив выпускников' : 'Плательщики'}
-          </h1>
-          <p className="text-accent mt-1">Всего: {total} записей</p>
+          </Heading>
+          <Text as="p" size="2" color="gray" mt="1">Всего: {total} записей</Text>
         </div>
-        <div className="flex gap-2 w-full sm:w-auto">
-          <button
-            onClick={handleExport}
-            disabled={isExporting}
-            className="btn-outline w-full sm:w-auto justify-center flex items-center gap-2 disabled:opacity-50"
-            title="Экспорт в Excel"
-          >
-            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            {isExporting ? 'Экспорт...' : 'Excel'}
-          </button>
+
+        {/* Кнопки Radix, а не прежние классы: иначе рядом стоящие «Excel»
+            и «Добавить» расходились по высоте и скруглениям. */}
+        <Flex gap="2" wrap="wrap">
+          <Button variant="soft" color="gray" onClick={handleExport} disabled={isExporting}
+                  title="Экспорт в Excel">
+            {isExporting ? <Spinner size="1" /> : <DownloadIcon />}
+            {isExporting ? 'Экспорт…' : 'Excel'}
+          </Button>
           {canEdit && (
-            <Link to="/add-payer" className="btn-primary w-full sm:w-auto justify-center">
-              + Добавить
-            </Link>
+            <Button asChild>
+              <Link to="/add-payer"><PlusIcon />Добавить</Link>
+            </Button>
           )}
-        </div>
-      </div>
+        </Flex>
+      </Flex>
 
-      {/* Filters */}
-      <div className="card mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-          {/* Search */}
-          <div className="sm:col-span-2">
-            <input
-              type="text"
-              placeholder="Поиск по фамилии, группе, кафедре"
-              value={search}
-              onChange={(e) => updateFilter('search', e.target.value)}
-              className="input"
-            />
-          </div>
-
-          {/* Деректорат Filter */}
-          <select
-            value={facultyId || ''}
-            onChange={(e) => updateFilter('faculty', e.target.value)}
-            className="input"
+      {/* Фильтры */}
+      <Card size="2" mb="4">
+        <Flex gap="3" wrap="wrap">
+          <TextField.Root
+            placeholder="Поиск по фамилии, группе, кафедре"
+            value={search}
+            onChange={(e) => updateFilter('search', e.target.value)}
+            style={{ flex: '2 1 260px' }}
           >
-            <option value="">Все деректораты</option>
-            {faculties.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.short_name || f.name}
-              </option>
-            ))}
-          </select>
+            <TextField.Slot><MagnifyingGlassIcon /></TextField.Slot>
+          </TextField.Root>
 
-          {/* Статус — только 2 варианта */}
-          <select
-            value={status || ''}
-            onChange={(e) => updateFilter('status', e.target.value)}
-            className="input"
-          >
-            <option value="">Все статусы</option>
-            <option value="paid">Оплачено</option>
-            <option value="partial">Частично</option>
-            <option value="unpaid">Не оплачено</option>
-          </select>
+          <Select.Root value={facultyId ? String(facultyId) : 'all'}
+                       onValueChange={(v) => updateFilter('faculty', v === 'all' ? '' : v)}>
+            <Select.Trigger style={{ flex: '1 1 190px' }} aria-label="Деректорат" />
+            <Select.Content>
+              <Select.Item value="all">Все деректораты</Select.Item>
+              {faculties.map((f) => (
+                <Select.Item key={f.id} value={String(f.id)}>{f.short_name || f.name}</Select.Item>
+              ))}
+            </Select.Content>
+          </Select.Root>
 
-          {/* Архив: выпустившиеся по умолчанию скрыты */}
-          <select
-            value={archiveMode}
-            onChange={(e) => updateFilter('archive', e.target.value)}
-            className="input"
-          >
-            <option value="active">Без архива</option>
-            <option value="archived">Только архив</option>
-            <option value="all">Все, включая архив</option>
-          </select>
-        </div>
-      </div>
+          <Select.Root value={status || 'all'}
+                       onValueChange={(v) => updateFilter('status', v === 'all' ? '' : v)}>
+            <Select.Trigger style={{ flex: '1 1 150px' }} aria-label="Статус оплаты" />
+            <Select.Content>
+              <Select.Item value="all">Все статусы</Select.Item>
+              <Select.Item value="paid">Оплачено</Select.Item>
+              <Select.Item value="partial">Частично</Select.Item>
+              <Select.Item value="unpaid">Не оплачено</Select.Item>
+            </Select.Content>
+          </Select.Root>
+
+          {/* Выпустившиеся по умолчанию скрыты */}
+          <Select.Root value={archiveMode} onValueChange={(v) => updateFilter('archive', v)}>
+            <Select.Trigger style={{ flex: '1 1 170px' }} aria-label="Архив" />
+            <Select.Content>
+              <Select.Item value="active">Без архива</Select.Item>
+              <Select.Item value="archived">Только архив</Select.Item>
+              <Select.Item value="all">Все, включая архив</Select.Item>
+            </Select.Content>
+          </Select.Root>
+        </Flex>
+      </Card>
 
       {/* Table */}
       <div className="card overflow-hidden">
         {isLoading ? (
-          <div className="flex items-center justify-center h-64 animate-fade-in">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-          </div>
+          <Flex align="center" justify="center" style={{ height: 220 }}>
+            <Spinner size="3" />
+          </Flex>
         ) : payers.length === 0 ? (
           <div className="text-center py-12 text-accent animate-fade-in">
             <p>Плательщики не найдены</p>
@@ -336,14 +331,14 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
               <button
                 onClick={() => updateFilter('page', String(page - 1))}
                 disabled={page === 1}
-                className="btn-outline btn-sm flex-1 sm:flex-none justify-center disabled:opacity-50"
+                className="btn-outline btn-sm flex-1 sm:flex-none justify-center"
               >
                 Назад
               </button>
               <button
                 onClick={() => updateFilter('page', String(page + 1))}
                 disabled={page === pages}
-                className="btn-outline btn-sm flex-1 sm:flex-none justify-center disabled:opacity-50"
+                className="btn-outline btn-sm flex-1 sm:flex-none justify-center"
               >
                 Вперёд
               </button>

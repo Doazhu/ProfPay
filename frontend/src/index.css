@@ -15,6 +15,21 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  Единая шкала движения.
+
+  Одна кривая и три длительности на весь интерфейс: разнобой в таймингах
+  читается как неаккуратность даже когда каждый переход по отдельности хорош.
+  Кривая ease-out — движение начинается быстро и мягко тормозит, поэтому
+  отклик кажется мгновенным, а не вялым.
+*/
+:root {
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --dur-1: 110ms;   /* наведение, нажатие */
+  --dur-2: 180ms;   /* появление, раскрытие */
+  --dur-3: 260ms;   /* смена темы */
+}
+
 html { -webkit-text-size-adjust: 100%; }
 
 body { margin: 0; overflow-x: hidden; }
@@ -30,6 +45,14 @@ body { margin: 0; overflow-x: hidden; }
   Собственные компоненты Radix Themes это не затрагивает — они задают свои
   стили с большей специфичностью.
 */
+/*
+  Главное из потерянного вместе со сбросом Tailwind. Без него у <div> и <input>
+  остаётся content-box, а Radix Themes ставит своим компонентам border-box —
+  и рамка с внутренним отступом начинают считаться по-разному. На глаз это
+  выглядело как разъехавшиеся по высоте кнопка и поле рядом: 38 px против 32.
+*/
+*, *::before, *::after { box-sizing: border-box; }
+
 a { color: inherit; text-decoration: inherit; }
 
 h1, h2, h3, h4, h5, h6, p, figure, blockquote { margin: 0; }
@@ -56,7 +79,12 @@ table, .tabular, input[type="number"] { font-variant-numeric: tabular-nums; }
      Оставлены для мест, где ещё не заменены на <Button> из Radix Themes,
      и повторяют их вид, чтобы страницы не выглядели разнородно. */
 
-  .btn {
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .btn-outline,
+  .btn-ghost,
+  .btn-danger {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -64,16 +92,35 @@ table, .tabular, input[type="number"] { font-variant-numeric: tabular-nums; }
     min-height: var(--space-6);
     padding: 0 var(--space-3);
     border: 1px solid transparent;
-    border-radius: var(--radius-3);
+    /* Тот же радиус, что у полей и у контролов Radix размера 2: иначе
+       стоящие рядом кнопка и поле скругляются по-разному. */
+    border-radius: var(--radius-2);
     font-family: var(--default-font-family);
     font-size: var(--font-size-2);
     font-weight: 500;
     line-height: 1;
     cursor: pointer;
-    transition: background-color 100ms, border-color 100ms, color 100ms;
+    transition: background-color var(--dur-1) var(--ease),
+                border-color var(--dur-1) var(--ease),
+                color var(--dur-1) var(--ease),
+                transform var(--dur-1) var(--ease);
   }
 
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn:disabled,
+  .btn-primary:disabled,
+  .btn-secondary:disabled,
+  .btn-outline:disabled,
+  .btn-ghost:disabled,
+  .btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Отклик на нажатие: кнопка чуть утопает. Сдвиг мельче пикселя —
+     ощущается, но не прыгает. */
+  .btn:not(:disabled):active,
+  .btn-primary:not(:disabled):active,
+  .btn-secondary:not(:disabled):active,
+  .btn-outline:not(:disabled):active,
+  .btn-ghost:not(:disabled):active,
+  .btn-danger:not(:disabled):active { transform: scale(0.985); }
 
   .btn-primary { background: var(--accent-9); color: var(--accent-contrast); }
   .btn-primary:not(:disabled):hover { background: var(--accent-10); }
@@ -106,6 +153,12 @@ table, .tabular, input[type="number"] { font-variant-numeric: tabular-nums; }
   .btn-sm { min-height: var(--space-5); padding: 0 var(--space-2); font-size: var(--font-size-1); }
   .btn-lg { min-height: var(--space-7); padding: 0 var(--space-4); font-size: var(--font-size-3); }
 
+  /* Ссылка в роли кнопки: без этого подчёркивание из базового сброса
+     проступает при наведении. */
+  a.btn, a.btn-primary, a.btn-secondary, a.btn-outline, a.btn-ghost, a.btn-danger {
+    text-decoration: none;
+  }
+
   /* ---------------- Поля ввода ---------------- */
 
   .input {
@@ -118,7 +171,7 @@ table, .tabular, input[type="number"] { font-variant-numeric: tabular-nums; }
     color: var(--gray-12);
     font-family: var(--default-font-family);
     font-size: var(--font-size-2);
-    transition: border-color 100ms, box-shadow 100ms;
+    transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
   }
 
   .input::placeholder { color: var(--gray-a9); }
@@ -132,6 +185,21 @@ table, .tabular, input[type="number"] { font-variant-numeric: tabular-nums; }
   .input:disabled { background: var(--gray-a2); color: var(--gray-a9); cursor: not-allowed; }
 
   textarea.input { padding: var(--space-2); line-height: 1.5; }
+
+  /*
+    Системный <select> рядом с Radix Select выдавала себя стрелка: у одного
+    родная стрелка операционной системы, у другого — своя. Рисуем такую же
+    и оставляем место справа, чтобы длинный текст под неё не заезжал.
+  */
+  select.input {
+    appearance: none;
+    padding-right: var(--space-6);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 15 15' fill='none' stroke='%238b8d98' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 6.5 7.5 9.5 10.5 6.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right var(--space-2) center;
+    background-size: 15px 15px;
+    cursor: pointer;
+  }
 
   .input-error { border-color: var(--red-8); }
   .input-error:focus { border-color: var(--red-8); box-shadow: 0 0 0 1px var(--red-8); }
@@ -167,7 +235,7 @@ table, .tabular, input[type="number"] { font-variant-numeric: tabular-nums; }
     border: 1px solid var(--gray-a5);
     border-radius: var(--radius-4);
     padding: var(--space-4);
-    transition: border-color 100ms;
+    transition: border-color var(--dur-1) var(--ease);
   }
   .card-interactive:hover { border-color: var(--gray-a8); }
 
@@ -177,7 +245,12 @@ table, .tabular, input[type="number"] { font-variant-numeric: tabular-nums; }
      Цвета не из акцента: «оплачено» — это состояние, а не фирменный цвет.
      Иначе при смене акцента поедет смысл. */
 
-  .badge {
+  .badge,
+  .badge-success,
+  .badge-danger,
+  .badge-warning,
+  .badge-info,
+  .badge-muted {
     display: inline-flex;
     align-items: center;
     padding: 2px var(--space-2);
@@ -208,7 +281,7 @@ table, .tabular, input[type="number"] { font-variant-numeric: tabular-nums; }
     font-size: var(--font-size-2);
     text-decoration: none;
     cursor: pointer;
-    transition: background-color 100ms, color 100ms;
+    transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
   }
   .sidebar-link:hover { background: var(--gray-a3); color: var(--gray-12); }
 
@@ -246,7 +319,7 @@ table, .tabular, input[type="number"] { font-variant-numeric: tabular-nums; }
     vertical-align: middle;
   }
 
-  .table-row-interactive { transition: background-color 80ms; }
+  .table-row-interactive { transition: background-color var(--dur-1) var(--ease); }
   .table-row-interactive:hover { background: var(--gray-a2); }
 
   /* Архивные строки приглушены, но остаются читаемыми. */
@@ -277,17 +350,50 @@ table, .tabular, input[type="number"] { font-variant-numeric: tabular-nums; }
 }
 
 @layer utilities {
-  .animate-fade-in { animation: fade-in 120ms ease-out; }
-  .animate-fade-in-fast { animation: fade-in 90ms ease-out; }
-  /* Старые имена оставлены, чтобы не править разметку на каждой странице:
-     эффект у всех один — короткое проявление без движения. */
+  /* Появление страницы: проявление с подъёмом на три пикселя. Достаточно,
+     чтобы переход между разделами читался как движение, и слишком мало,
+     чтобы отвлекать при быстрой работе со списком. */
+  .animate-fade-in { animation: fade-rise var(--dur-2) var(--ease) both; }
+  .animate-fade-in-fast { animation: fade-in var(--dur-1) var(--ease) both; }
+  .animate-expand { animation: expand var(--dur-2) var(--ease) both; overflow: hidden; }
+
+  /* Старые имена оставлены, чтобы не править разметку на каждой странице. */
   .animate-fade-in-up,
   .animate-scale-in,
   .animate-slide-in,
-  .animate-slide-in-right { animation: fade-in 120ms ease-out; }
+  .animate-slide-in-right { animation: fade-rise var(--dur-2) var(--ease) both; }
 }
 
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+@keyframes fade-rise {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Раскрытие «Остального»: высота считается по содержимому, иначе список
+   появляется рывком. */
+@keyframes expand {
+  from { opacity: 0; transform: translateY(-4px); max-height: 0; }
+  to   { opacity: 1; transform: none; max-height: 420px; }
+}
+
+/*
+  Смена темы.
+
+  Переход вешается только на время переключения — классом на <html>.
+  Держать его постоянно нельзя: тогда каждое наведение на строку таблицы
+  тянулось бы четверть секунды, и список начал бы «плыть».
+*/
+.theme-switching,
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: background-color var(--dur-3) var(--ease),
+              border-color var(--dur-3) var(--ease),
+              color var(--dur-3) var(--ease),
+              fill var(--dur-3) var(--ease) !important;
+}
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @media (prefers-reduced-motion: reduce) {

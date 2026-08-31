@@ -1,5 +1,5 @@
 import {
-  createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode,
+  createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, ReactNode,
 } from 'react';
 
 /**
@@ -100,6 +100,29 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     root.classList.toggle('classic-skin', skin === 'classic');
     root.style.colorScheme = resolvedAppearance;
   }, [skin, resolvedAppearance]);
+
+  /*
+    Плавная смена темы.
+
+    Переход по цвету включается только на время переключения. Держать его
+    постоянно нельзя: тогда каждое наведение на строку таблицы тянулось бы
+    четверть секунды и список начал бы «плыть». Первую отрисовку пропускаем —
+    иначе страница проявлялась бы через переход при каждой загрузке.
+  */
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    const root = document.documentElement;
+    root.classList.add('theme-switching');
+    const timer = window.setTimeout(() => root.classList.remove('theme-switching'), 300);
+    return () => {
+      window.clearTimeout(timer);
+      root.classList.remove('theme-switching');
+    };
+  }, [resolvedAppearance]);
 
   const setAppearance = useCallback((value: Appearance) => {
     setAppearanceState(value);

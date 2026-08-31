@@ -153,11 +153,6 @@ class UserRepository:
         """Вход разрешён и по логину, и по почте — так привычнее бухгалтеру."""
         return self.get_by_username(login) or self.get_by_email(login)
 
-    def get_by_reset_token_hash(self, token_hash: str) -> Optional[SystemUser]:
-        return self.db.query(SystemUser).filter(
-            SystemUser.reset_token_hash == token_hash
-        ).first()
-
     def get_all(self, skip: int = 0, limit: int = 100) -> List[SystemUser]:
         return self.db.query(SystemUser).order_by(SystemUser.id).offset(skip).limit(limit).all()
 
@@ -617,6 +612,62 @@ class StatsRepository:
             }
             for row in rows
         ]
+
+    def academic_years_with_data(self) -> List[str]:
+        """
+        Учебные годы, по которым есть платежи.
+
+        Нужно, чтобы в отчётах выбирались только годы, где что-то было,
+        а не жёстко «четыре последних календарных».
+        """
+        rows = self.db.query(Payment.academic_year).filter(
+            Payment.academic_year.isnot(None)
+        ).distinct().all()
+        return sorted({row[0] for row in rows if row[0]}, reverse=True)
+
+    def monthly_by_academic_year(self, academic_year: str) -> List[dict]:
+        """
+        Помесячно за учебный год: сентябрь предыдущего по август следующего.
+
+        Раньше отчёт строился по календарному году, и осенний семестр
+        отваливался: платежи октября 2025 относятся к 2025-2026, но в отчёт
+        «за 2026» не попадали. Из-за этого в конце лета отчёт выглядел пустым.
+        """
+        try:
+            start_year = int(academic_year.split("-")[0])
+        except (ValueError, IndexError, AttributeError):
+            return []
+
+        period_start = date(start_year, 9, 1)
+        period_end = date(start_year + 1, 8, 31)
+
+        rows = (
+            self.db.query(
+                func.extract("year", Payment.payment_date).cast(Integer).label("y"),
+                func.extract("month", Payment.payment_date).cast(Integer).label("m"),
+                func.count(Payment.id).label("cnt"),
+                func.coalesce(func.sum(Payment.amount), 0).label("total"),
+            )
+            .filter(Payment.payment_date >= period_start, Payment.payment_date <= period_end)
+            .group_by("y", "m")
+            .all()
+        )
+        found = {(int(r.y), int(r.m)): r for r in rows}
+
+        # Все двенадцать месяцев подряд, включая пустые: иначе на графике
+        # пропуски выглядят как отсутствие периода, а не как нулевой сбор.
+        result = []
+        for offset in range(12):
+            month = 9 + offset
+            year = start_year + (month - 1) // 12
+            month = (month - 1) % 12 + 1
+            row = found.get((year, month))
+            result.append({
+                "month": f"{year}-{month:02d}",
+                "payments_count": row.cnt if row else 0,
+                "total_amount": Decimal(row.total) if row else Decimal("0"),
+            })
+        return result
 
     def monthly(self, year: int) -> List[dict]:
         month = func.extract("month", Payment.payment_date).cast(Integer)

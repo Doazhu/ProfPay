@@ -17,7 +17,6 @@ CVE-2024-33664 (отказ в обслуживании на сжатых ток�
 """
 import base64
 import hashlib
-import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -154,28 +153,3 @@ def generate_csrf_token() -> str:
 def validate_csrf_token(token: str, stored_token: str) -> bool:
     """Сравнение за постоянное время — обычное == подсказало бы длину совпадения."""
     return secrets.compare_digest(token, stored_token)
-
-
-# ---------------------------------------------------------------------------
-# Токены восстановления пароля
-# ---------------------------------------------------------------------------
-
-def generate_reset_token() -> str:
-    """Одноразовый токен для ссылки восстановления (256 бит энтропии)."""
-    return secrets.token_urlsafe(32)
-
-
-def hash_reset_token(token: str) -> str:
-    """
-    Хеш токена для хранения в БД.
-
-    В базе лежит только хеш: утечка дампа не должна давать возможность
-    сбросить пароль. SHA-256 без соли здесь достаточно — токен и так
-    случайный, перебирать нечего.
-    """
-    return hashlib.sha256(token.encode("ascii")).hexdigest()
-
-
-def compare_reset_token(token: str, stored_hash: str) -> bool:
-    """Сравнение хешей токена за постоянное время."""
-    return hmac.compare_digest(hash_reset_token(token), stored_hash or "")

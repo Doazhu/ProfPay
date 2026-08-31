@@ -6,16 +6,35 @@ export default function ReportsPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [facultyStats, setFacultyStats] = useState<FacultyStats[]>([]);
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStats[]>([]);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  /*
+    Отчёт считается по учебному году, а не календарному.
+
+    Раньше здесь стоял new Date().getFullYear(), и осенний семестр отваливался:
+    платежи октября 2025 относятся к учебному году 2025-2026, но в отчёт
+    «за 2026» не попадали. К концу лета отчёт выглядел пустым при живых данных.
+
+    Пустая строка означает «ещё не загрузили» — до ответа сервера мы не знаем,
+    какой год текущий, и не должны угадывать.
+  */
+  const [academicYear, setAcademicYear] = useState('');
+  const [availableYears, setAvailableYears] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     loadStats();
+    // Список годов и текущий приходят с сервера: там же живёт правило
+    // «учебный год начинается 1 сентября».
+    statsApi.getAcademicYears()
+      .then((years) => {
+        setAvailableYears(years);
+        if (years.length) setAcademicYear((current) => current || years[0]);
+      })
+      .catch((error) => console.error('Не удалось получить список учебных годов:', error));
   }, []);
 
   useEffect(() => {
-    loadMonthlyStats();
-  }, [selectedYear]);
+    if (academicYear) loadMonthlyStats();
+  }, [academicYear]);
 
   const loadStats = async () => {
     try {
@@ -34,7 +53,7 @@ export default function ReportsPage() {
 
   const loadMonthlyStats = async () => {
     try {
-      const data = await statsApi.getMonthly(selectedYear);
+      const data = await statsApi.getMonthly(academicYear);
       setMonthlyStats(data);
     } catch (error) {
       console.error('Failed to load monthly stats:', error);
@@ -209,13 +228,17 @@ export default function ReportsPage() {
       {/* Monthly Stats */}
       <div className="card">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-          <h2 className="text-base md:text-lg font-semibold text-dark">Помесячная статистика платежей</h2>
+          <div>
+            <h2 className="text-base md:text-lg font-semibold text-dark">Помесячная статистика платежей</h2>
+            <p className="hint">Учебный год: с сентября по август</p>
+          </div>
           <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(Number(e.target.value))}
-            className="input w-full sm:w-32"
+            value={academicYear}
+            onChange={(e) => setAcademicYear(e.target.value)}
+            className="input w-full sm:w-44"
+            aria-label="Учебный год"
           >
-            {Array.from({ length: 4 }, (_, i) => new Date().getFullYear() - i).map((year) => (
+            {availableYears.map((year) => (
               <option key={year} value={year}>{year}</option>
             ))}
           </select>
@@ -223,7 +246,7 @@ export default function ReportsPage() {
 
         {monthlyStats.length === 0 ? (
           <p className="text-center text-accent py-8">
-            Нет данных за {selectedYear} год
+            За {academicYear} платежей ещё нет
           </p>
         ) : (
           <>

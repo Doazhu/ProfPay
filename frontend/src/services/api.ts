@@ -18,6 +18,8 @@ import type {
   AuditLogEntry,
   GroupHint,
   DataEntryContext,
+  TotpSetup,
+  TotpStatus,
   PaymentStatus,
   FacultyCreate,
 } from '../types';
@@ -105,22 +107,37 @@ export const authApi = {
     return data;
   },
 
-  changePassword: async (currentPassword: string, newPassword: string): Promise<void> => {
+  changePassword: async (
+    currentPassword: string, newPassword: string, totpCode?: string,
+  ): Promise<void> => {
     await api.post('/auth/change-password', {
       current_password: currentPassword,
       new_password: newPassword,
+      totp_code: totpCode || undefined,
     });
   },
 
-  /** Запросить письмо со ссылкой восстановления. */
-  requestPasswordReset: async (email: string): Promise<{ message: string }> => {
-    const { data } = await api.post('/auth/password-reset/request', { email });
+  // ---- Второй фактор (приложение-аутентификатор) ----
+
+  totpStatus: async (): Promise<TotpStatus> => {
+    const { data } = await api.get('/auth/totp/status');
     return data;
   },
 
-  /** Задать новый пароль по токену из письма. */
-  confirmPasswordReset: async (token: string, newPassword: string): Promise<void> => {
-    await api.post('/auth/password-reset/confirm', { token, new_password: newPassword });
+  /** Начать привязку: получить секрет и QR-код. Фактор ещё не включается. */
+  totpSetup: async (): Promise<TotpSetup> => {
+    const { data } = await api.post('/auth/totp/setup');
+    return data;
+  },
+
+  /** Подтвердить привязку кодом. Возвращает резервные коды — показываются один раз. */
+  totpEnable: async (code: string): Promise<string[]> => {
+    const { data } = await api.post('/auth/totp/enable', { code });
+    return data.recovery_codes;
+  },
+
+  totpDisable: async (password: string, code: string): Promise<void> => {
+    await api.post('/auth/totp/disable', { password, code });
   },
 };
 
@@ -160,6 +177,11 @@ export const userApi = {
   /** Снять блокировку входа, не меняя пароль. */
   unlock: async (id: number): Promise<void> => {
     await api.post(`/auth/users/${id}/unlock`);
+  },
+
+  /** Сбросить второй фактор — когда телефон потерян, а резервных кодов нет. */
+  resetTotp: async (id: number): Promise<void> => {
+    await api.post(`/auth/users/${id}/totp/reset`);
   },
 };
 
@@ -327,8 +349,17 @@ export const statsApi = {
     return data;
   },
 
-  getMonthly: async (year?: number): Promise<MonthlyStats[]> => {
-    const { data } = await api.get('/stats/monthly', { params: { year } });
+  /** Помесячно за учебный год (сентябрь–август). Без аргумента — текущий. */
+  getMonthly: async (academicYear?: string): Promise<MonthlyStats[]> => {
+    const { data } = await api.get('/stats/monthly', {
+      params: { academic_year: academicYear },
+    });
+    return data;
+  },
+
+  /** Учебные годы, по которым есть данные, плюс текущий. */
+  getAcademicYears: async (): Promise<string[]> => {
+    const { data } = await api.get('/stats/academic-years');
     return data;
   },
 

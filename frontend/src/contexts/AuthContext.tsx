@@ -7,6 +7,8 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (credentials: LoginCredentials) => Promise<void>;
+  /** Ошибка входа означает, что нужен код второго фактора. */
+  needsTotp: (error: unknown) => boolean;
   logout: () => Promise<void>;
   canEdit: boolean;
   isAdmin: boolean;
@@ -40,6 +42,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(userData);
   };
 
+  /** Требуется ли для этой ошибки код из приложения-аутентификатора. */
+  const needsTotp = (error: unknown): boolean =>
+    (error as { response?: { headers?: Record<string, string> } })
+      ?.response?.headers?.['x-requires-totp'] === '1';
+
   const logout = async () => {
     await authApi.logout();
     setUser(null);
@@ -50,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading,
     isAuthenticated: !!user,
     login,
+    needsTotp,
     logout,
     canEdit: user?.role === 'admin' || user?.role === 'operator',
     isAdmin: user?.role === 'admin',

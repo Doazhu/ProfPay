@@ -42,6 +42,9 @@ class LoginRequest(BaseModel):
     """Вход по логину или по почте."""
     username: str = Field(..., min_length=3, max_length=255)
     password: str = Field(..., min_length=1, max_length=256)
+    # Шестизначный код из приложения-аутентификатора либо резервный код
+    # вида «abcd-efgh». Нужен, только если второй фактор включён.
+    totp_code: Optional[str] = Field(None, max_length=20)
 
     @field_validator("username")
     @classmethod
@@ -58,6 +61,9 @@ class TokenResponse(BaseModel):
 class PasswordChange(BaseModel):
     current_password: str = Field(..., min_length=1, max_length=256)
     new_password: str = Field(..., min_length=8, max_length=256)
+    # При включённом втором факторе смена пароля тоже подтверждается кодом:
+    # иначе перехваченная сессия позволила бы сменить пароль в обход него.
+    totp_code: Optional[str] = Field(None, max_length=20)
 
 
 class AdminPasswordReset(BaseModel):
@@ -65,15 +71,35 @@ class AdminPasswordReset(BaseModel):
     new_password: str = Field(..., min_length=8, max_length=256)
 
 
-class PasswordResetRequest(BaseModel):
-    """Запрос ссылки восстановления."""
-    email: EmailStr
+# ---- Второй фактор ----
+
+class TotpSetupResponse(BaseModel):
+    """Данные для привязки приложения-аутентификатора."""
+    secret: str          # показываем, если QR отсканировать нечем
+    qr_svg: str          # готовый QR — рисуется на сервере
+    account: str         # что покажет приложение рядом с кодом
 
 
-class PasswordResetConfirm(BaseModel):
-    """Установка нового пароля по токену из письма."""
-    token: str = Field(..., min_length=16, max_length=256)
-    new_password: str = Field(..., min_length=8, max_length=256)
+class TotpEnableRequest(BaseModel):
+    """Подтверждение привязки: код из приложения."""
+    code: str = Field(..., min_length=6, max_length=10)
+
+
+class TotpEnableResponse(BaseModel):
+    """Резервные коды. Показываются один раз — потом только хеши."""
+    recovery_codes: List[str]
+
+
+class TotpDisableRequest(BaseModel):
+    """Отключение второго фактора — под пароль и действующий код."""
+    password: str = Field(..., min_length=1, max_length=256)
+    code: str = Field(..., min_length=6, max_length=20)
+
+
+class TotpStatus(BaseModel):
+    """Включён ли второй фактор и сколько резервных кодов осталось."""
+    enabled: bool
+    recovery_codes_left: int
 
 
 # ============== Пользователи ==============
@@ -115,6 +141,7 @@ class UserResponse(BaseModel):
     created_at: datetime
     last_login: Optional[datetime]
     is_locked: bool = False
+    totp_enabled: bool = False
 
 
 # ============== Деректораты ==============

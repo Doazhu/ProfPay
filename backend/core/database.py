@@ -99,8 +99,9 @@ def _ensure_columns(db: Session) -> None:
         "system_users": {
             "failed_login_attempts": "INTEGER NOT NULL DEFAULT 0",
             "locked_until": "TIMESTAMP WITH TIME ZONE",
-            "reset_token_hash": "VARCHAR(64)",
-            "reset_token_expires": "TIMESTAMP WITH TIME ZONE",
+            "totp_secret": "TEXT",
+            "totp_enabled": "BOOLEAN NOT NULL DEFAULT FALSE",
+            "totp_recovery_hashes": "TEXT",
         },
         "payers": {
             "admission_year": "INTEGER",

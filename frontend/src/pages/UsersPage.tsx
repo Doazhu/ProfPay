@@ -148,6 +148,20 @@ export default function UsersPage() {
     }
   };
 
+  const handleResetTotp = async (user: User) => {
+    if (!confirm(`Сбросить второй фактор для «${user.username}»? `
+      + 'Он сможет войти по одному паролю, пока не настроит приложение заново.')) return;
+    setError('');
+    try {
+      await userApi.resetTotp(user.id);
+      setResetNotice(`Второй фактор для «${user.username}» сброшен`);
+      setTimeout(() => setResetNotice(''), 6000);
+      await loadUsers();
+    } catch (err) {
+      setError(extractErrorMessage(err, 'Не удалось сбросить второй фактор'));
+    }
+  };
+
   const handleDeleteUser = async (user: User) => {
     if (user.id === currentUser?.id) return;
     if (!confirm(`Удалить пользователя "${user.full_name}"? Это действие необратимо.`)) return;
@@ -367,6 +381,11 @@ export default function UsersPage() {
                       <span className={user.is_active ? 'badge-success' : 'badge-danger'}>
                         {user.is_active ? 'Активен' : 'Отключён'}
                       </span>
+                      {user.totp_enabled && (
+                        <span className="badge-info" title="Вход защищён кодом из приложения">
+                          2FA
+                        </span>
+                      )}
                       {user.is_locked && (
                         <span className="badge-warning" title="Вход заблокирован после неудачных попыток">
                           Вход заблокирован
@@ -388,6 +407,15 @@ export default function UsersPage() {
                       >
                         Пароль
                       </button>
+                      {user.totp_enabled && (
+                        <button
+                          onClick={() => handleResetTotp(user)}
+                          className="text-primary hover:text-primary-dark text-sm py-1"
+                          title="Сбросить второй фактор — когда телефон потерян"
+                        >
+                          Сбросить 2FA
+                        </button>
+                      )}
                       {user.is_locked && (
                         <button
                           onClick={() => handleUnlock(user)}
