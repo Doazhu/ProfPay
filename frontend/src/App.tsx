@@ -6,6 +6,7 @@ import { Theme } from '@radix-ui/themes';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider, useTheme } from './theme/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import TotpGate from './components/TotpGate';
 import ErrorBoundary from './components/ErrorBoundary';
 import Layout from './components/Layout';
 
@@ -73,7 +74,13 @@ export default function App() {
                     {/* Всё остальное — только после входа */}
                     <Route
                       path="/"
-                      element={<ProtectedRoute><Layout /></ProtectedRoute>}
+                      element={(
+                        <ProtectedRoute>
+                          {/* Пока второй фактор обязателен, а у человека не
+                              привязан, вместо разделов открывается привязка. */}
+                          <TotpGate><Layout /></TotpGate>
+                        </ProtectedRoute>
+                      )}
                     >
                       <Route index element={<DashboardPage />} />
                       <Route path="payers" element={<PayersPage />} />

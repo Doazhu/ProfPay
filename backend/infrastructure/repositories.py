@@ -505,6 +505,14 @@ class PaymentSettingsRepository:
         return True
 
 
+# Ключ настройки «второй фактор обязателен для всех».
+TOTP_POLICY_KEY = "require_totp"
+
+# Значения, которые считаются «да». Настройку правят и руками в базе, поэтому
+# принимаем несколько привычных написаний, а не одно.
+_TRUTHY = {"1", "true", "yes", "on", "да"}
+
+
 class AppSettingsRepository:
     """Настройки ключ-значение."""
 
@@ -517,6 +525,29 @@ class AppSettingsRepository:
     def get_value(self, key: str, default: Optional[str] = None) -> Optional[str]:
         setting = self.get_by_key(key)
         return setting.value if setting else default
+
+    def get_bool(self, key: str, default: bool) -> bool:
+        raw = self.get_value(key)
+        if raw is None:
+            return default
+        return raw.strip().lower() in _TRUTHY
+
+    def totp_required(self) -> bool:
+        """
+        Обязателен ли второй фактор всем пользователям.
+
+        По умолчанию — да. Учётные записи здесь дают доступ к персональным
+        данным студентов, и пароль в качестве единственной защиты для них
+        мало. Администратор может выключить требование в настройках.
+        """
+        return self.get_bool(TOTP_POLICY_KEY, default=True)
+
+    def set_totp_required(self, value: bool) -> None:
+        self.set(
+            TOTP_POLICY_KEY,
+            "true" if value else "false",
+            "Требовать второй фактор от всех пользователей",
+        )
 
     def set(self, key: str, value: str, description: Optional[str] = None) -> AppSettings:
         setting = self.get_by_key(key)
@@ -584,7 +615,13 @@ class StatsRepository:
                 Faculty.short_name,
                 func.count(Payer.id).label("total"),
                 func.coalesce(func.sum(case((Payer.status == PaymentStatus.PAID, 1), else_=0)), 0).label("paid"),
-                func.coalesce(func.sum(case((Payer.status == PaymentStatus.UNPAID, 1), else_=0)), 0).label("unpaid"),
+                # Должник — и тот, кто не платил вовсе, и тот, кто внёс часть.
+                # Так же считает сводка наверху панели и раздел «Должники»;
+                # раньше здесь были только UNPAID, и на одном экране под одной
+                # подписью стояли разные числа.
+                func.coalesce(func.sum(case((
+                    Payer.status.in_([PaymentStatus.UNPAID, PaymentStatus.PARTIAL]), 1
+                ), else_=0)), 0).label("debtors"),
             )
             .outerjoin(Payer, payer_join)
             .filter(Faculty.is_active.is_(True))
@@ -607,7 +644,7 @@ class StatsRepository:
                 "faculty_name": row.short_name or row.name,
                 "total_payers": row.total or 0,
                 "paid_count": row.paid or 0,
-                "unpaid_count": row.unpaid or 0,
+                "debtors_count": row.debtors or 0,
                 "total_amount": Decimal(amounts.get(row.id, 0)),
             }
             for row in rows

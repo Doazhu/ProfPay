@@ -168,7 +168,7 @@ export default function ReportsPage() {
                     <td className="py-3 px-4 text-dark font-medium">{faculty.faculty_name}</td>
                     <td className="py-3 px-4 text-right text-dark">{faculty.total_payers}</td>
                     <td className="py-3 px-4 text-right text-green-600">{faculty.paid_count}</td>
-                    <td className="py-3 px-4 text-right text-red-600">{faculty.unpaid_count}</td>
+                    <td className="py-3 px-4 text-right text-red-600">{faculty.debtors_count}</td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <div className="w-24 bg-light-dark rounded-full h-2 overflow-hidden">
@@ -216,7 +216,7 @@ export default function ReportsPage() {
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-accent">Всего: {faculty.total_payers}</span>
                   <span className="text-green-600">Оплат: {faculty.paid_count}</span>
-                  <span className="text-red-600">Долг: {faculty.unpaid_count}</span>
+                  <span className="text-red-600">Долг: {faculty.debtors_count}</span>
                   <span className="text-accent">{percentage.toFixed(0)}%</span>
                 </div>
               </div>

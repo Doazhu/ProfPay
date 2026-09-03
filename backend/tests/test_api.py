@@ -293,12 +293,38 @@ def test_faculty_stats(auth_client, faculty):
     assert row["faculty_name"] == "ИИТА"
 
 
+def test_faculty_debtors_match_the_dashboard(auth_client, faculty, year_settings):
+    """
+    «Должники» в разрезе деректоратов и в сводке наверху — одно и то же число.
+
+    Раньше в разрезе считались только совсем не платившие, а в сводке ещё и
+    заплатившие часть. На одном экране под одной подписью стояли разные числа.
+    """
+    not_paid = make_payer(auth_client, faculty.id, last_name="Неплательщик", email=None)
+    partial = make_payer(auth_client, faculty.id, last_name="Частичный", email=None)
+    auth_client.post(f"{API}/payers/{partial['id']}/payments", json={
+        "amount": "50.00", "payment_date": str(date.today()), "semester": "fall",
+    })
+
+    dashboard = auth_client.get(f"{API}/stats/dashboard").json()
+    by_faculty = next(r for r in auth_client.get(f"{API}/stats/by-faculty").json()
+                      if r["faculty_id"] == faculty.id)
+    debtors_page = auth_client.get(f"{API}/debtors").json()
+
+    assert dashboard["total_debtors"] == 2
+    assert by_faculty["debtors_count"] == 2
+    assert debtors_page["total"] == 2
+    assert {not_paid["id"], partial["id"]} == {p["id"] for p in debtors_page["items"]}
+
+
 # ---------------------------------------------------------------------------
 # Пользователи и права
 # ---------------------------------------------------------------------------
 
 def test_viewer_cannot_create_payer(client, admin, faculty):
     client.post(f"{API}/auth/login", json={"username": "admin", "password": ADMIN_PASSWORD})
+    # Требование второго фактора здесь мешает: проверяются права, а не вход.
+    client.put(f"{API}/auth/totp/policy", json={"enabled": False})
     client.post(f"{API}/auth/users", json={
         "username": "viewer", "email": "viewer@profpay.site",
         "password": "ПарольПросмотра2026", "full_name": "Только просмотр", "role": "viewer",
@@ -388,3 +414,50 @@ def test_security_headers_present(client):
     assert headers["x-frame-options"] == "DENY"
     assert headers["x-content-type-options"] == "nosniff"
     assert "x-xss-protection" not in headers   # заголовок устарел и сам был вектором
+
+
+# ---------------------------------------------------------------------------
+# Выгрузка в Excel
+# ---------------------------------------------------------------------------
+
+def test_export_does_not_leak_formulas(auth_client, faculty):
+    """
+    Примечание вида «=HYPERLINK(...)» не должно стать формулой у бухгалтера.
+
+    Данные вводит один человек, а выгрузку открывает другой — Excel выполнил бы
+    формулу из ячейки на его машине.
+    """
+    import io
+
+    import openpyxl
+
+    make_payer(auth_client, faculty.id,
+               last_name="Формулов", email=None,
+               notes='=HYPERLINK("http://example.invalid","жми")')
+
+    response = auth_client.get(f"{API}/payers/export")
+    assert response.status_code == 200
+
+    sheet = openpyxl.load_workbook(io.BytesIO(response.content)).active
+    values = [c.value for row in sheet.iter_rows(min_row=2) for c in row if c.value]
+    notes = next(v for v in values if isinstance(v, str) and "HYPERLINK" in v)
+
+    assert notes.startswith("'=")            # обезврежено апострофом
+    assert not any(                          # ни одна ячейка не стала формулой
+        cell.data_type == "f" for row in sheet.iter_rows() for cell in row
+    )
+
+
+def test_export_keeps_phone_readable(auth_client, faculty):
+    """Телефон с плюсом Excel иначе считает формулой и теряет «+»."""
+    import io
+
+    import openpyxl
+
+    make_payer(auth_client, faculty.id, last_name="Телефонов", email=None)
+    response = auth_client.get(f"{API}/payers/export")
+    sheet = openpyxl.load_workbook(io.BytesIO(response.content)).active
+
+    phones = [c.value for row in sheet.iter_rows(min_row=2) for c in row
+              if isinstance(c.value, str) and "79001234567" in c.value]
+    assert phones == ["'+79001234567"]

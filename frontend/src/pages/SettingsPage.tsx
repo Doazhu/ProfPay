@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
-import { Badge, Box, Card, Flex, Heading, Link, RadioCards, Text } from '@radix-ui/themes';
+import { LockClosedIcon } from '@radix-ui/react-icons';
+import {
+  Badge, Box, Callout, Card, Flex, Heading, Link, RadioCards, Switch, Text,
+} from '@radix-ui/themes';
 import { ThemeAppearanceControl } from '../components/ThemeToggle';
 import { useTheme, type Skin } from '../theme/ThemeContext';
 import type { Faculty, PaymentSettings, BudgetSettings } from '../types';
-import { facultyApi, paymentSettingsApi, budgetSettingsApi, extractErrorMessage } from '../services/api';
+import {
+  authApi, facultyApi, paymentSettingsApi, budgetSettingsApi, extractErrorMessage,
+} from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
 /** Возвращает текущий учебный год в формате "2025-2026" */
@@ -216,6 +221,8 @@ export default function SettingsPage() {
         <p className="text-accent mt-1">Управление справочниками и настройками — СПБГУПТД</p>
       </div>
 
+      <SecuritySettings />
+
       <AppearanceSettings />
 
       {/* Tabs */}
@@ -279,7 +286,7 @@ export default function SettingsPage() {
               <div
                 key={faculty.id}
                 className={`p-3 rounded-lg border ${
-                  faculty.is_active ? 'border-light-dark' : 'border-red-200 bg-red-50/50'
+                  faculty.is_active ? 'border-light-dark' : 'border-red-200 bg-red-50'
                 }`}
               >
                 {editingFacultyId === faculty.id ? (
@@ -583,6 +590,77 @@ export default function SettingsPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+/**
+ * Безопасность входа.
+ *
+ * Одна настройка, но с большими последствиями, поэтому она вынесена наверх
+ * страницы: пока требование включено, каждый пользователь — и заведённый
+ * завтра тоже — обязан привязать приложение, прежде чем попадёт в разделы.
+ */
+function SecuritySettings() {
+  const [required, setRequired] = useState<boolean | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    authApi.totpPolicy().then(setRequired).catch(() => setRequired(null));
+  }, []);
+
+  const change = async (value: boolean) => {
+    setError('');
+    setSaving(true);
+    try {
+      setRequired(await authApi.setTotpPolicy(value));
+    } catch (err) {
+      setError(extractErrorMessage(err, 'Не удалось сохранить настройку'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card size="2" mb="5">
+      <Flex align="center" gap="2" mb="1">
+        <LockClosedIcon />
+        <Heading size="3">Вход в систему</Heading>
+        {required === true && <Badge color="green">Второй фактор обязателен</Badge>}
+        {required === false && <Badge color="amber">Только пароль</Badge>}
+      </Flex>
+
+      {error && (
+        <Callout.Root color="red" size="1" mb="3">
+          <Callout.Text>{error}</Callout.Text>
+        </Callout.Root>
+      )}
+
+      <Flex align="start" gap="3" mt="3">
+        <Switch
+          checked={required === true}
+          disabled={required === null || saving}
+          onCheckedChange={change}
+          aria-label="Требовать второй фактор от всех"
+        />
+        <Box>
+          <Text as="div" size="2" weight="medium">
+            Требовать второй фактор от всех пользователей
+          </Text>
+          <Text as="p" size="1" color="gray" mt="1">
+            Каждый, включая заведённых позже, привязывает своё приложение
+            для кодов и вводит код при входе. Пока приложение не привязано,
+            разделы для него закрыты — это проверяет и сервер, не только интерфейс.
+          </Text>
+          <Text as="p" size="1" color="gray" mt="1">
+            Свой второй фактор настраивается в разделе{' '}
+            <Link asChild><RouterLink to="/change-password">«Пароль и вход»</RouterLink></Link>.
+            Если пользователь потерял телефон, второй фактор ему сбрасывают
+            в разделе «Пользователи».
+          </Text>
+        </Box>
+      </Flex>
+    </Card>
   );
 }
 

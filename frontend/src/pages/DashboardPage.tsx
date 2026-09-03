@@ -177,7 +177,7 @@ export default function DashboardPage() {
                   <td className="py-3 px-4 text-dark">{faculty.faculty_name}</td>
                   <td className="py-3 px-4 text-right text-dark">{faculty.total_payers}</td>
                   <td className="py-3 px-4 text-right text-green-600">{faculty.paid_count}</td>
-                  <td className="py-3 px-4 text-right text-red-600">{faculty.unpaid_count}</td>
+                  <td className="py-3 px-4 text-right text-red-600">{faculty.debtors_count}</td>
                   <td className="py-3 px-4 text-right text-dark font-medium">
                     {formatMoney(faculty.total_amount)}
                   </td>
@@ -205,7 +205,7 @@ export default function DashboardPage() {
                   <span className="text-green-600">Оплатили: {faculty.paid_count}</span>
                 </div>
                 <div>
-                  <span className="text-red-600">Должники: {faculty.unpaid_count}</span>
+                  <span className="text-red-600">Должники: {faculty.debtors_count}</span>
                 </div>
               </div>
             </div>

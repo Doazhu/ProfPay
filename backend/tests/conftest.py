@@ -106,8 +106,15 @@ def client():
 
 @pytest.fixture
 def auth_client(client, admin):
-    """Клиент с активной сессией администратора."""
+    """
+    Клиент с активной сессией администратора.
+
+    Требование второго фактора здесь снимается: по умолчанию оно включено,
+    и без этого каждый тест про учёт взносов пришлось бы начинать с привязки
+    приложения. Тесты самого требования включают его обратно явно.
+    """
     response = client.post("/api/v1/auth/login",
                            json={"username": "admin", "password": ADMIN_PASSWORD})
     assert response.status_code == 200, response.text
+    client.put("/api/v1/auth/totp/policy", json={"enabled": False})
     return client

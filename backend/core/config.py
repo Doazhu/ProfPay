@@ -3,9 +3,10 @@
 (docker-compose.prod.yml передаёт их контейнеру из .env).
 """
 from functools import lru_cache
-from typing import List, Optional
+from typing import Annotated, Any, List, Optional
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -70,11 +71,40 @@ class Settings(BaseSettings):
     PUBLIC_URL: str = "https://profpay.site"
 
     # ---- Безопасность HTTP ----
-    CORS_ORIGINS: List[str] = ["http://localhost:5173"]
+    # NoDecode отключает разбор значения как JSON — списки собирает валидатор
+    # ниже, чтобы запись через запятую работала наравне с JSON.
+    CORS_ORIGINS: Annotated[List[str], NoDecode] = ["http://localhost:5173"]
     COOKIE_SECURE: bool = False
     COOKIE_HTTPONLY: bool = True
     COOKIE_SAMESITE: str = "lax"
-    TRUSTED_HOSTS: List[str] = ["*"]
+    TRUSTED_HOSTS: Annotated[List[str], NoDecode] = ["*"]
+
+    @field_validator("CORS_ORIGINS", "TRUSTED_HOSTS", mode="before")
+    @classmethod
+    def _parse_list(cls, value: Any) -> Any:
+        """
+        Списки можно писать и через запятую, и в JSON.
+
+        Раньше принимался только JSON, и строка
+        `CORS_ORIGINS=https://profpay.site` роняла запуск с сообщением
+        «Expecting value: line 1 column 1» — по нему невозможно догадаться,
+        что не хватает кавычек и скобок. На боевом сервере такое падение
+        выглядит как «сайт не поднялся после обновления».
+        """
+        if not isinstance(value, str):
+            return value
+
+        text = value.strip()
+        if text.startswith("["):
+            import json
+            try:
+                return json.loads(text)
+            except ValueError as error:
+                raise ValueError(
+                    f"Не разобрать список: {text!r}. Допустимо либо "
+                    f'JSON ["a","b"], либо просто a,b'
+                ) from error
+        return [item.strip() for item in text.split(",") if item.strip()]
 
 
 @lru_cache()

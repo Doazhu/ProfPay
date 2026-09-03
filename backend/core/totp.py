@@ -18,6 +18,7 @@
 """
 import base64
 import hashlib
+import io
 import secrets
 from typing import List, Optional
 
@@ -46,10 +47,17 @@ def provisioning_uri(secret: str, account: str) -> str:
 
 def qr_svg(secret: str, account: str) -> str:
     """
-    QR-код ссылки привязки в виде встроенного SVG.
+    QR-код ссылки привязки — самостоятельный документ SVG.
 
     Рисуется на сервере, чтобы не тянуть JS-библиотеку и не разрешать
     в Content-Security-Policy сторонние скрипты ради одной картинки.
+
+    Важно, что это именно самостоятельный документ с объявленным xmlns:
+    браузер грузит его как картинку по data:-адресу, а не вставляет разметкой.
+    Раньше здесь был svg_inline — он рассчитан на вставку внутрь HTML и
+    пространство имён не объявляет, поэтому картинка не открывалась вовсе,
+    и на месте QR-кода была пустота. Привязать приложение можно было только
+    вводом ключа руками.
 
     Код всегда чёрный на белом, независимо от темы интерфейса. Светлый код
     на тёмном фоне — инвертированный, и заметная часть сканеров такие
@@ -57,7 +65,13 @@ def qr_svg(secret: str, account: str) -> str:
     код распознаётся хуже.
     """
     qr = segno.make(provisioning_uri(secret, account), error="m")
-    return qr.svg_inline(scale=5, border=3, dark="#000000", light="#ffffff")
+    buffer = io.BytesIO()
+    qr.save(
+        buffer, kind="svg", scale=5, border=3,
+        dark="#000000", light="#ffffff",
+        xmldecl=False,   # объявление XML в data:-адресе только мешает
+    )
+    return buffer.getvalue().decode("utf-8")
 
 
 def verify_code(secret: Optional[str], code: Optional[str]) -> bool:

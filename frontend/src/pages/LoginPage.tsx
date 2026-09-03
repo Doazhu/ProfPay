@@ -1,8 +1,17 @@
-import { useState, FormEvent } from 'react';
-import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { FormEvent, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { ExclamationTriangleIcon } from '@radix-ui/react-icons';
+import {
+  Box, Button, Callout, Flex, Heading, Text, TextField,
+} from '@radix-ui/themes';
+
 import { useAuth } from '../contexts/AuthContext';
 import { extractErrorMessage } from '../services/api';
 import { safeRedirectPath } from '../utils/navigation';
+import { useTheme } from '../theme/ThemeContext';
+import { ThemeToggleButton } from '../components/ThemeToggle';
+import LoginBackground from '../components/LoginBackground';
+import PasswordField from '../components/PasswordField';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -16,10 +25,9 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   const { login, needsTotp } = useAuth();
+  const { resolvedAppearance } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
-  const [searchParams] = useSearchParams();
-  const justReset = searchParams.get('reset') === '1';
 
   // Адрес возврата приходит из адресной строки — пропускаем только
   // относительные пути внутри приложения (см. utils/navigation.ts).
@@ -52,119 +60,115 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-light px-4 py-8">
-      <div className="w-full max-w-sm animate-fade-in">
-        <div className="mb-6">
-          <div className="flex items-center gap-2.5 mb-1">
-            <div className="w-8 h-8 rounded bg-primary flex items-center justify-center text-white font-semibold text-sm">
+    <>
+      <LoginBackground appearance={resolvedAppearance} />
+
+      {/* Переключатель темы доступен до входа: если человеку светит солнце
+          в окно, он должен иметь возможность включить светлую тему сразу. */}
+      <Box style={{ position: 'fixed', top: 16, right: 16, zIndex: 2 }}>
+        <ThemeToggleButton />
+      </Box>
+
+      <div className="login-shell">
+        <div className="login-glass animate-fade-in">
+          <Flex align="center" gap="3" mb="5">
+            <Flex
+              align="center" justify="center"
+              style={{
+                width: 36, height: 36,
+                borderRadius: 'var(--radius-3)',
+                background: 'var(--accent-9)',
+                color: 'var(--accent-contrast)',
+                fontWeight: 700, fontSize: 16,
+                flexShrink: 0,
+              }}
+            >
               P
-            </div>
-            <h1 className="text-xl font-semibold text-dark">ProfPay</h1>
-          </div>
-          <p className="text-sm text-accent">Учёт плательщиков профсоюзных взносов</p>
-        </div>
-
-        <div className="card">
-          <h2 className="text-lg font-semibold text-dark mb-4">Вход</h2>
-
-          {justReset && (
-            <div className="mb-4 px-3 py-2 rounded border border-[#C6E3D4] bg-[#EDF6F1] text-state-paid text-sm">
-              Пароль изменён. Войдите с новым паролем.
-            </div>
-          )}
+            </Flex>
+            <Box>
+              <Heading size="5" style={{ lineHeight: 1.1 }}>ProfPay</Heading>
+              <Text as="div" size="1" color="gray">Учёт профсоюзных взносов</Text>
+            </Box>
+          </Flex>
 
           {error && (
-            <div className="mb-4 px-3 py-2 rounded border border-[#EFCFCC] bg-[#FBEEED] text-state-unpaid text-sm">
-              {error}
-            </div>
+            <Callout.Root color="red" size="1" mb="4">
+              <Callout.Icon><ExclamationTriangleIcon /></Callout.Icon>
+              <Callout.Text>{error}</Callout.Text>
+            </Callout.Root>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="username" className="block text-sm font-medium text-accent mb-1">
-                Логин или почта
-              </label>
-              <input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="input"
-                placeholder="admin"
-                required
-                autoComplete="username"
-              />
-            </div>
-
-            <div>
-              <div className="flex items-baseline justify-between mb-1">
-                <label htmlFor="password" className="block text-sm font-medium text-accent">
-                  Пароль
-                </label>
-                <span className="text-xs text-accent-light" title="Пароль восстанавливает администратор в разделе «Пользователи»">
-                  Забыли? — к администратору
-                </span>
-              </div>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="input"
-                placeholder="••••••••"
-                required
-                autoComplete="current-password"
-              />
-            </div>
-
-            {totpRequired && (
-              <div>
-                <label htmlFor="totp" className="block text-sm font-medium text-accent mb-1">
-                  Код из приложения
-                </label>
-                <input
-                  id="totp"
-                  type="text"
-                  value={totpCode}
-                  onChange={(e) => setTotpCode(e.target.value)}
-                  className="input"
-                  placeholder="000000"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={20}
+          <form onSubmit={handleSubmit}>
+            <Flex direction="column" gap="4">
+              <Box>
+                <Text as="label" htmlFor="username" size="1" weight="medium" color="gray"
+                      mb="1" style={{ display: 'block' }}>
+                  Логин или почта
+                </Text>
+                <TextField.Root
+                  id="username"
+                  size="3"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="admin"
+                  required
+                  autoComplete="username"
                   autoFocus
-                  style={{ letterSpacing: '0.15em' }}
                 />
-                <p className="hint">
-                  Шестизначный код из Google Authenticator или резервный вида «abcd-efgh»
-                </p>
-              </div>
-            )}
+              </Box>
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="btn-primary btn-lg w-full"
-            >
-              {isLoading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Вход...
-                </span>
-              ) : (
-                'Войти'
+              <Box>
+                <Text as="label" htmlFor="password" size="1" weight="medium" color="gray"
+                      mb="1" style={{ display: 'block' }}>
+                  Пароль
+                </Text>
+                <PasswordField
+                  id="password"
+                  size="3"
+                  value={password}
+                  onChange={setPassword}
+                  placeholder="••••••••"
+                  required
+                  autoComplete="current-password"
+                />
+              </Box>
+
+              {totpRequired && (
+                <Box className="animate-fade-in">
+                  <Text as="label" htmlFor="totp" size="1" weight="medium" color="gray"
+                        mb="1" style={{ display: 'block' }}>
+                    Код из приложения
+                  </Text>
+                  <TextField.Root
+                    id="totp"
+                    size="3"
+                    value={totpCode}
+                    onChange={(e) => setTotpCode(e.target.value)}
+                    placeholder="000000"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={20}
+                    autoFocus
+                    style={{ letterSpacing: '0.15em' }}
+                  />
+                  <Text as="p" size="1" color="gray" mt="1">
+                    Шестизначный код из приложения-аутентификатора
+                    или резервный вида «abcd-efgh»
+                  </Text>
+                </Box>
               )}
-            </button>
+
+              <Button type="submit" size="3" disabled={isLoading} style={{ width: '100%' }}>
+                {isLoading ? 'Проверяем…' : 'Войти'}
+              </Button>
+            </Flex>
           </form>
 
-          <p className="hint mt-5 text-center">
-            Нет доступа? Обратитесь к администратору профкома
-          </p>
+          <Text as="p" size="1" color="gray" mt="5" align="center">
+            Забыли пароль или потеряли телефон — обратитесь к администратору профкома
+          </Text>
         </div>
       </div>
-    </div>
+    </>
   );
 }

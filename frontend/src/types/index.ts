@@ -130,7 +130,8 @@ export interface FacultyStats {
   faculty_name: string;
   total_payers: number;
   paid_count: number;
-  unpaid_count: number;
+  /** Не заплатившие вовсе плюс заплатившие частично — как в сводке наверху. */
+  debtors_count: number;
   total_amount: number;
 }
 
@@ -167,6 +168,8 @@ export interface TotpSetup {
 export interface TotpStatus {
   enabled: boolean;
   recovery_codes_left: number;
+  /** Второй фактор обязателен всем по настройке системы. */
+  required: boolean;
 }
 
 export interface TokenResponse {

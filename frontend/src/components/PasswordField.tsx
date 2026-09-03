@@ -11,6 +11,8 @@ interface PasswordFieldProps {
   required?: boolean;
   invalid?: boolean;
   id?: string;
+  /** Размер поля Radix — на странице входа поля крупнее, чем в формах. */
+  size?: '1' | '2' | '3';
 }
 
 /**
@@ -21,13 +23,14 @@ interface PasswordFieldProps {
  * ещё и перекрывала правый край текста.
  */
 export default function PasswordField({
-  value, onChange, placeholder, autoComplete, autoFocus, required, invalid, id,
+  value, onChange, placeholder, autoComplete, autoFocus, required, invalid, id, size,
 }: PasswordFieldProps) {
   const [visible, setVisible] = useState(false);
 
   return (
     <TextField.Root
       id={id}
+      size={size}
       type={visible ? 'text' : 'password'}
       value={value}
       onChange={(e) => onChange(e.target.value)}

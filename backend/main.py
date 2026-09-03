@@ -49,6 +49,25 @@ def _check_configuration() -> None:
                 "COOKIE_SECURE=false вне отладки: куки уйдут по HTTP. "
                 "Включите его, если сайт работает по HTTPS."
             )
+        if "*" in settings.CORS_ORIGINS:
+            # allow_credentials=True вместе со звёздочкой означает, что любой
+            # сайт сможет ходить в API с куками пользователя. Это не «открыто
+            # для всех», а полноценный обход защиты от межсайтовых запросов.
+            problems.append(
+                "CORS_ORIGINS=* вместе с куками сессии — любой сайт сможет "
+                "делать запросы от имени вошедшего. Перечислите адреса явно, "
+                "например CORS_ORIGINS=https://profpay.site"
+            )
+        if settings.TRUSTED_HOSTS == ["*"]:
+            logger.warning(
+                "TRUSTED_HOSTS=* — проверка заголовка Host выключена. "
+                "Укажите домен: TRUSTED_HOSTS=profpay.site,www.profpay.site"
+            )
+        if settings.COOKIE_SAMESITE.lower() not in ("lax", "strict", "none"):
+            problems.append(
+                f"COOKIE_SAMESITE={settings.COOKIE_SAMESITE!r} — допустимо "
+                "lax, strict или none"
+            )
 
     try:
         get_fernet()

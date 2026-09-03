@@ -11,6 +11,10 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
+    // Фон страницы входа (AeroShards) вендорится из React Bits как есть,
+    // в .jsx. Переписывать его на TypeScript нельзя — иначе обновление
+    // компонента перестанет быть заменой одного файла.
+    "allowJs": true,
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,

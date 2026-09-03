@@ -42,6 +42,31 @@ def test_code_verification():
     assert not totp_service.verify_code(None, code_for(secret))
 
 
+def test_qr_is_a_standalone_svg_document():
+    """
+    QR должен открываться как картинка по data:-адресу.
+
+    Без объявленного xmlns браузер такой файл не рисует: на месте кода
+    оказывалась пустота, и привязать приложение можно было только вводом
+    ключа руками. Проверяется именно пространство имён — по виду разметки
+    поломка незаметна.
+    """
+    svg = totp_service.qr_svg(totp_service.generate_secret(), "user@profpay.site")
+    assert svg.startswith("<svg")
+    assert 'xmlns="http://www.w3.org/2000/svg"' in svg
+    assert "<?xml" not in svg          # в data:-адресе объявление только мешает
+
+
+def test_qr_encodes_the_binding_link():
+    """В коде должна быть ссылка привязки именно этого секрета."""
+    secret = totp_service.generate_secret()
+    uri = totp_service.provisioning_uri(secret, "user@profpay.site")
+
+    assert uri.startswith("otpauth://totp/")
+    assert secret in uri
+    assert "issuer=ProfPay" in uri
+
+
 def test_code_from_other_secret_rejected():
     assert not totp_service.verify_code(
         totp_service.generate_secret(), code_for(totp_service.generate_secret())
@@ -232,3 +257,180 @@ def test_admin_can_reset_lost_second_factor(auth_client, admin):
                    if u["username"] == "operator")
 
     assert auth_client.post(f"{API}/auth/users/{user_id}/totp/reset").status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Несколько пользователей: у каждого свой второй фактор
+# ---------------------------------------------------------------------------
+
+OPERATOR_PASSWORD = "ПарольОператора2026"
+
+
+def create_operator(client, username="operator", email="op@profpay.site") -> int:
+    """Завести пользователя и вернуть его id (вызывать под администратором)."""
+    created = client.post(f"{API}/auth/users", json={
+        "username": username, "email": email,
+        "password": OPERATOR_PASSWORD, "full_name": "Оператор", "role": "operator",
+    })
+    assert created.status_code == 201, created.text
+    return created.json()["id"]
+
+
+def test_new_user_starts_without_second_factor(auth_client, admin):
+    """Заведённый пользователь второго фактора ещё не имеет — его он привяжет сам."""
+    user_id = create_operator(auth_client)
+    listed = next(u for u in auth_client.get(f"{API}/auth/users").json() if u["id"] == user_id)
+    assert listed["totp_enabled"] is False
+
+
+def test_every_user_binds_its_own_second_factor(client, admin):
+    """
+    Второй фактор заводится под каждую учётную запись отдельно.
+
+    Проверяется главное: секреты разные, код одного пользователя не пускает
+    другого, и включение у второго ничего не ломает у первого.
+    """
+    client.post(f"{API}/auth/login", json={"username": "admin", "password": ADMIN_PASSWORD})
+    admin_secret, _ = enable_totp(client)
+    create_operator(client)
+
+    client.post(f"{API}/auth/logout")
+    client.cookies.clear()
+
+    assert client.post(f"{API}/auth/login", json={
+        "username": "operator", "password": OPERATOR_PASSWORD,
+    }).status_code == 200
+    assert client.get(f"{API}/auth/totp/status").json()["enabled"] is False
+
+    operator_secret, operator_codes = enable_totp(client)
+    assert operator_secret != admin_secret
+
+    client.post(f"{API}/auth/logout")
+    client.cookies.clear()
+
+    # Без кода не пускают, с чужим кодом — тоже.
+    assert client.post(f"{API}/auth/login", json={
+        "username": "operator", "password": OPERATOR_PASSWORD,
+    }).status_code == 401
+    assert client.post(f"{API}/auth/login", json={
+        "username": "operator", "password": OPERATOR_PASSWORD,
+        "totp_code": code_for(admin_secret),
+    }).status_code == 401
+
+    assert client.post(f"{API}/auth/login", json={
+        "username": "operator", "password": OPERATOR_PASSWORD,
+        "totp_code": code_for(operator_secret),
+    }).status_code == 200
+
+    # Резервные коды у каждого свои.
+    client.post(f"{API}/auth/logout")
+    client.cookies.clear()
+    assert client.post(f"{API}/auth/login", json={
+        "username": "admin", "password": ADMIN_PASSWORD, "totp_code": operator_codes[0],
+    }).status_code == 401
+    assert client.post(f"{API}/auth/login", json={
+        "username": "admin", "password": ADMIN_PASSWORD, "totp_code": code_for(admin_secret),
+    }).status_code == 200
+
+
+def test_disabling_one_user_does_not_touch_another(client, admin):
+    """Отключение второго фактора у одного не снимает его у другого."""
+    client.post(f"{API}/auth/login", json={"username": "admin", "password": ADMIN_PASSWORD})
+    admin_secret, _ = enable_totp(client)
+    create_operator(client)
+    client.put(f"{API}/auth/totp/policy", json={"enabled": False})
+
+    client.post(f"{API}/auth/logout")
+    client.cookies.clear()
+    client.post(f"{API}/auth/login", json={
+        "username": "operator", "password": OPERATOR_PASSWORD,
+    })
+    operator_secret, _ = enable_totp(client)
+    assert client.post(f"{API}/auth/totp/disable", json={
+        "password": OPERATOR_PASSWORD, "code": code_for(operator_secret),
+    }).status_code == 200
+
+    client.post(f"{API}/auth/logout")
+    client.cookies.clear()
+    assert client.post(f"{API}/auth/login", json={
+        "username": "admin", "password": ADMIN_PASSWORD,
+    }).status_code == 401  # у администратора фактор на месте
+
+
+def test_admin_reset_does_not_affect_other_users(client, admin):
+    """Сброс второго фактора одному пользователю не трогает остальных."""
+    client.post(f"{API}/auth/login", json={"username": "admin", "password": ADMIN_PASSWORD})
+    admin_secret, _ = enable_totp(client)
+    user_id = create_operator(client)
+
+    assert client.post(f"{API}/auth/users/{user_id}/totp/reset").status_code == 200
+
+    client.post(f"{API}/auth/logout")
+    client.cookies.clear()
+    assert client.post(f"{API}/auth/login", json={
+        "username": "admin", "password": ADMIN_PASSWORD, "totp_code": code_for(admin_secret),
+    }).status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Требование второго фактора для всех
+# ---------------------------------------------------------------------------
+
+def test_required_by_default(client, admin):
+    """По умолчанию второй фактор обязателен — иначе его никто не настроит."""
+    client.post(f"{API}/auth/login", json={"username": "admin", "password": ADMIN_PASSWORD})
+    assert client.get(f"{API}/auth/totp/policy").json()["enabled"] is True
+    assert client.get(f"{API}/auth/totp/status").json()["required"] is True
+
+
+def test_work_sections_closed_until_second_factor_bound(auth_client, admin):
+    """
+    Пока фактор обязателен, а приложение не привязано, рабочие разделы закрыты.
+
+    Проверка живёт на сервере, а не только в интерфейсе: иначе требование
+    обходилось бы прямым запросом к API.
+    """
+    auth_client.put(f"{API}/auth/totp/policy", json={"enabled": True})
+
+    blocked = auth_client.get(f"{API}/payers")
+    assert blocked.status_code == 403
+    assert blocked.headers.get("X-Totp-Enrollment-Required") == "1"
+
+    # Привязка при этом остаётся доступной — иначе выйти из положения нельзя.
+    enable_totp(auth_client)
+    assert auth_client.get(f"{API}/payers").status_code == 200
+
+
+def test_policy_off_lets_unbound_user_work(auth_client, admin):
+    """Со снятым требованием непривязанный пользователь работает как раньше."""
+    auth_client.put(f"{API}/auth/totp/policy", json={"enabled": False})
+    assert auth_client.get(f"{API}/payers").status_code == 200
+    assert auth_client.get(f"{API}/auth/totp/status").json()["required"] is False
+
+
+def test_policy_change_is_admin_only(client, admin):
+    """Требование снимает только администратор."""
+    client.post(f"{API}/auth/login", json={"username": "admin", "password": ADMIN_PASSWORD})
+    client.put(f"{API}/auth/totp/policy", json={"enabled": False})
+    create_operator(client)
+
+    client.post(f"{API}/auth/logout")
+    client.cookies.clear()
+    client.post(f"{API}/auth/login", json={
+        "username": "operator", "password": OPERATOR_PASSWORD,
+    })
+    assert client.put(f"{API}/auth/totp/policy", json={"enabled": True}).status_code == 403
+
+
+def test_admin_without_second_factor_can_still_drop_requirement(auth_client, admin):
+    """
+    Администратор без привязанного приложения обязан иметь выход.
+
+    Настройки закрыты тем же требованием, поэтому снятие требования сделано
+    отдельной ручкой — иначе получилась бы запертая дверь с ключом внутри.
+    """
+    auth_client.put(f"{API}/auth/totp/policy", json={"enabled": True})
+
+    assert auth_client.get(f"{API}/settings/faculties").status_code in (403, 404)
+    assert auth_client.put(f"{API}/auth/totp/policy", json={"enabled": False}).status_code == 200
+    assert auth_client.get(f"{API}/payers").status_code == 200

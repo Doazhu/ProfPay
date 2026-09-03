@@ -65,6 +65,32 @@ img, svg, video, canvas { display: block; max-width: 100%; }
 
 button, input, select, textarea { font: inherit; color: inherit; }
 
+/*
+  Кнопки без своего класса.
+
+  Со сбросом Tailwind ушли и правила для <button>, а Radix Themes сбрасывает
+  только свои компоненты — по классу. В итоге обычные кнопки в старых разделах
+  рисовались системными: серая заливка, объёмная рамка, прямые углы.
+
+  Селектор намеренно один и только по тегу. Список вида
+  `button, [type="submit"]` поднимал вес правила до веса класса, и оно начинало
+  перебивать и заливку кнопок Radix (кнопка «Войти» становилась прозрачной),
+  и утилиты Tailwind вроде bg-primary. По тегу вес минимальный — любой класс
+  сверху перекрывает без усилий.
+*/
+button {
+  -webkit-appearance: button;
+  appearance: button;
+  background-color: transparent;
+  background-image: none;
+  border: 0 solid;
+  padding: 0;
+  text-transform: none;
+  cursor: pointer;
+}
+
+button:disabled { cursor: default; }
+
 table { border-collapse: collapse; }
 
 /* Цифры выравниваются по разрядам везде, где их сравнивают взглядом. */
@@ -362,6 +388,95 @@ table, .tabular, input[type="number"] { font-variant-numeric: tabular-nums; }
   .animate-scale-in,
   .animate-slide-in,
   .animate-slide-in-right { animation: fade-rise var(--dur-2) var(--ease) both; }
+}
+
+/* ------------------------------------------------------------------ *
+ * Страница входа: фон и матовое стекло
+ * ------------------------------------------------------------------ */
+
+/*
+  Фон лежит фиксированным слоем под содержимым. Канвас WebGPU кладётся
+  поверх статичной заливки, а не вместо неё: если графика не завелась,
+  под ней остаётся спокойный градиент, и страница не оказывается белой.
+*/
+.login-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.login-bg__still { position: absolute; inset: 0; }
+
+.login-bg__canvas {
+  position: absolute;
+  inset: 0;
+  /* Компонент рисует на всю доступную площадь родителя. */
+  width: 100%;
+  height: 100%;
+}
+
+.login-shell {
+  position: relative;
+  z-index: 1;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5) var(--space-4);
+}
+
+/*
+  Матовое стекло. Цвета заданы вручную, а не взяты из --color-panel-translucent:
+  в тёмной теме тот токен почти прозрачен и рассчитан на спокойный фон, а
+  здесь под карточкой движется графика, и текст на ней должен читаться.
+*/
+.login-glass {
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.6);
+  --glass-line: rgba(255, 255, 255, 0.75);
+  --glass-shadow: 0 24px 64px -28px rgba(12, 34, 24, 0.5);
+
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  padding: var(--space-6);
+  border-radius: var(--radius-5);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-line);
+  /* -webkit- нужен Safari: без него карточка останется просто полупрозрачной. */
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  backdrop-filter: blur(24px) saturate(150%);
+}
+
+.dark .login-glass,
+.dark-theme .login-glass {
+  --glass-bg: rgba(17, 24, 21, 0.55);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-line: rgba(255, 255, 255, 0.06);
+  --glass-shadow: 0 28px 72px -30px rgba(0, 0, 0, 0.8);
+}
+
+/*
+  Поля ввода внутри стекла тоже полупрозрачны — сплошная плашка на матовой
+  карточке выглядит наклейкой. Радиксовые поля красятся через свой токен
+  поверхности, поэтому переопределяется именно он.
+*/
+.login-glass :where(.rt-TextFieldRoot) {
+  --color-surface: rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 0 0 1px var(--gray-a6);
+}
+
+.dark .login-glass :where(.rt-TextFieldRoot),
+.dark-theme .login-glass :where(.rt-TextFieldRoot) {
+  --color-surface: rgba(255, 255, 255, 0.05);
+}
+
+/* Прозрачности не будет там, где браузер её не умеет, — тогда честная плашка. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .login-glass { --glass-bg: var(--color-panel-solid); }
 }
 
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }

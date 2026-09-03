@@ -122,7 +122,7 @@ export default function DebtorsPage() {
                 </thead>
                 <tbody>
                   {debtors.map((debtor) => (
-                    <tr key={debtor.id} className="border-b border-light-dark last:border-0 transition-colors duration-150 hover:bg-red-50/50">
+                    <tr key={debtor.id} className="border-b border-light-dark last:border-0 transition-colors duration-150 hover:bg-red-50">
                       <td className="py-3 px-4">
                         <Link to={`/payers/${debtor.id}`} className="text-dark hover:text-primary font-medium transition-colors duration-150">
                           {debtor.full_name}
@@ -159,7 +159,7 @@ export default function DebtorsPage() {
             {/* Mobile cards */}
             <div className="md:hidden space-y-3">
               {debtors.map((debtor) => (
-                <div key={debtor.id} className="p-4 bg-red-50/50 rounded-lg border border-red-100">
+                <div key={debtor.id} className="p-4 bg-red-50 rounded-lg border border-red-100">
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="min-w-0 flex-1">
                       <Link to={`/payers/${debtor.id}`} className="font-medium text-dark hover:text-primary transition-colors">

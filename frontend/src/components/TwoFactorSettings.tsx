@@ -17,7 +17,12 @@ import PasswordField from './PasswordField';
  * и только после ввода кода фактор включается. Иначе можно было бы включить
  * его, не успев настроить приложение, и запереть себя.
  */
-export default function TwoFactorSettings() {
+interface TwoFactorSettingsProps {
+  /** Сообщить наружу, что состояние изменилось — нужно экрану обязательной привязки. */
+  onStatusChange?: (status: TotpStatus) => void;
+}
+
+export default function TwoFactorSettings({ onStatusChange }: TwoFactorSettingsProps = {}) {
   const [status, setStatus] = useState<TotpStatus | null>(null);
   const [setup, setSetup] = useState<TotpSetup | null>(null);
   const [code, setCode] = useState('');
@@ -30,7 +35,12 @@ export default function TwoFactorSettings() {
   const [disablePassword, setDisablePassword] = useState('');
   const [disableCode, setDisableCode] = useState('');
 
-  const refresh = () => authApi.totpStatus().then(setStatus).catch(() => setStatus(null));
+  const refresh = () => authApi.totpStatus()
+    .then((next) => {
+      setStatus(next);
+      onStatusChange?.(next);
+    })
+    .catch(() => setStatus(null));
 
   useEffect(() => { refresh(); }, []);
 
@@ -81,9 +91,12 @@ export default function TwoFactorSettings() {
     QR отдаётся картинкой через data:-адрес, а не вставкой разметки.
     dangerouslySetInnerHTML для этого не нужен, а Content-Security-Policy
     уже разрешает img-src data: — дыру открывать не пришлось.
+
+    Параметр пишется как charset=utf-8: `;utf8` — не существующая запись,
+    браузеры её не обязаны понимать.
   */
   const qrSrc = setup
-    ? `data:image/svg+xml;utf8,${encodeURIComponent(setup.qr_svg)}`
+    ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(setup.qr_svg)}`
     : null;
 
   return (
@@ -180,9 +193,15 @@ export default function TwoFactorSettings() {
                 Резервных кодов осталось: <Text weight="medium">{status.recovery_codes_left}</Text>
               </Text>
             </Flex>
-            <Button variant="soft" color="red" onClick={() => setDisableOpen(true)}>
-              Отключить
-            </Button>
+            {status.required ? (
+              <Text size="1" color="gray">
+                Отключить нельзя: второй фактор обязателен для всех
+              </Text>
+            ) : (
+              <Button variant="soft" color="red" onClick={() => setDisableOpen(true)}>
+                Отключить
+              </Button>
+            )}
           </Flex>
         ) : (
           <Button onClick={startSetup} disabled={busy}>

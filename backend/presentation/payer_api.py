@@ -346,6 +346,22 @@ async def list_debtors(
     )
 
 
+# Символы, с которых Excel и LibreOffice начинают считать содержимое ячейки
+# формулой. Значения приходят из карточек плательщиков, то есть их набирает
+# человек, а выгрузку потом открывает бухгалтер — примечание вида
+# `=HYPERLINK(...)` или DDE-вызов сработали бы у него на машине.
+_FORMULA_STARTERS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _cell(value):
+    """Обезвредить значение перед записью в лист Excel."""
+    if not isinstance(value, str) or not value.startswith(_FORMULA_STARTERS):
+        return value
+    # Апостроф в начале — принятый способ заставить Excel считать содержимое
+    # текстом. В самой ячейке он не показывается.
+    return "'" + value
+
+
 @router.get("/payers/export")
 async def export_payers(
     faculty_id: Optional[int] = None,
@@ -391,7 +407,7 @@ async def export_payers(
 
     for row_idx, payer in enumerate(payers, start=2):
         raw_status = payer.status.value if hasattr(payer.status, "value") else payer.status
-        ws.append([
+        ws.append([_cell(value) for value in (
             row_idx - 1,
             payer.full_name,
             faculties.get(payer.faculty_id, ""),
@@ -410,7 +426,7 @@ async def export_payers(
             float(payer.total_paid or 0),
             str(payer.date_of_birth) if payer.date_of_birth else "",
             payer.notes or "",
-        ])
+        )])
         if row_idx % 2 == 0:
             fill = PatternFill(start_color="F0FAFA", end_color="F0FAFA", fill_type="solid")
             for col in range(1, len(headers) + 1):

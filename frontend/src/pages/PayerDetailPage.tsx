@@ -644,7 +644,7 @@ export default function PayerDetailPage() {
                     })}
                     className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
                       newPayment.semester === 'fall' && newPayment.amount === String(activeSettings.fall_amount)
-                        ? 'bg-blue-600 text-white border-blue-600'
+                        ? 'bg-blue-500 text-white border-blue-500'
                         : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-100'
                     }`}
                   >
@@ -659,7 +659,7 @@ export default function PayerDetailPage() {
                     })}
                     className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
                       newPayment.semester === 'spring' && newPayment.amount === String(activeSettings.spring_amount)
-                        ? 'bg-blue-600 text-white border-blue-600'
+                        ? 'bg-blue-500 text-white border-blue-500'
                         : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-100'
                     }`}
                   >
@@ -675,7 +675,7 @@ export default function PayerDetailPage() {
                     })}
                     className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
                       newPayment.amount === String(activeSettings.total_year_amount)
-                        ? 'bg-blue-600 text-white border-blue-600'
+                        ? 'bg-blue-500 text-white border-blue-500'
                         : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-100'
                     }`}
                   >

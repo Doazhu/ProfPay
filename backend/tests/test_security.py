@@ -109,3 +109,78 @@ def test_token_without_required_claims_rejected():
 
 def test_garbage_token_rejected():
     assert decode_token("совсем-не-токен") is None
+
+
+# ---------------------------------------------------------------------------
+# Стойкость паролей
+# ---------------------------------------------------------------------------
+
+def test_common_passwords_rejected():
+    """Пароли из первой сотни любого словаря подбираются мгновенно."""
+    from pydantic import ValidationError
+
+    from backend.application.schemas import UserCreate
+
+    for weak in ("password", "12345678", "admin123", "profpay123"):
+        with pytest.raises(ValidationError):
+            UserCreate(username="user1", email="u@profpay.site",
+                       password=weak, full_name="Пользователь")
+
+
+def test_password_equal_to_login_rejected():
+    from pydantic import ValidationError
+
+    from backend.application.schemas import UserCreate
+
+    with pytest.raises(ValidationError):
+        UserCreate(username="buhgalter", email="b@profpay.site",
+                   password="buhgalter", full_name="Бухгалтер")
+
+
+def test_password_of_repeated_characters_rejected():
+    from pydantic import ValidationError
+
+    from backend.application.schemas import UserCreate
+
+    with pytest.raises(ValidationError):
+        UserCreate(username="user1", email="u@profpay.site",
+                   password="ааааааааа", full_name="Пользователь")
+
+
+def test_normal_password_accepted():
+    from backend.application.schemas import UserCreate
+
+    user = UserCreate(username="user1", email="u@profpay.site",
+                      password="Взносы-Осень-2026", full_name="Пользователь")
+    assert user.password == "Взносы-Осень-2026"
+
+
+# ---------------------------------------------------------------------------
+# Подмена адреса клиента
+# ---------------------------------------------------------------------------
+
+def test_forwarded_header_ignored_from_outside():
+    """
+    X-Forwarded-For принимается только от своего же nginx.
+
+    Иначе перебор пароля обходился бы новым значением заголовка в каждом
+    запросе: ограничение по IP считало бы каждую попытку первой.
+    """
+    from backend.presentation.dependencies import client_ip
+
+    class FakeClient:
+        def __init__(self, host):
+            self.host = host
+
+    class FakeRequest:
+        def __init__(self, peer, forwarded):
+            self.client = FakeClient(peer)
+            self.headers = {"x-forwarded-for": forwarded} if forwarded else {}
+
+    # Запрос из локальной сети — заголовку верим (его ставит наш прокси).
+    assert client_ip(FakeRequest("172.18.0.5", "203.0.113.7")) == "203.0.113.7"
+    assert client_ip(FakeRequest("127.0.0.1", "203.0.113.7, 10.0.0.1")) == "203.0.113.7"
+
+    # Запрос напрямую снаружи — заголовок игнорируем.
+    assert client_ip(FakeRequest("198.51.100.9", "203.0.113.7")) == "198.51.100.9"
+    assert client_ip(FakeRequest("198.51.100.9", None)) == "198.51.100.9"

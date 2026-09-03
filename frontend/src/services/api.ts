@@ -139,6 +139,17 @@ export const authApi = {
   totpDisable: async (password: string, code: string): Promise<void> => {
     await api.post('/auth/totp/disable', { password, code });
   },
+
+  /** Обязателен ли второй фактор всем. */
+  totpPolicy: async (): Promise<boolean> => {
+    const { data } = await api.get('/auth/totp/policy');
+    return data.enabled;
+  },
+
+  setTotpPolicy: async (enabled: boolean): Promise<boolean> => {
+    const { data } = await api.put('/auth/totp/policy', { enabled });
+    return data.enabled;
+  },
 };
 
 // ============== User Management API ==============

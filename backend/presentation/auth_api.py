@@ -21,8 +21,8 @@ from sqlalchemy.orm import Session
 
 from backend.application.schemas import (
     AdminPasswordReset, LoginRequest, PasswordChange, TokenResponse,
-    TotpDisableRequest, TotpEnableRequest, TotpEnableResponse, TotpSetupResponse,
-    TotpStatus, UserCreate, UserResponse, UserUpdate,
+    TotpDisableRequest, TotpEnableRequest, TotpEnableResponse, TotpPolicy,
+    TotpSetupResponse, TotpStatus, UserCreate, UserResponse, UserUpdate,
 )
 from backend.core.config import settings
 from backend.core.database import get_db
@@ -33,7 +33,9 @@ from backend.core.security import (
 )
 from backend.core import totp as totp_service
 from backend.domain.models import SystemUser, UserRole
-from backend.infrastructure.repositories import AuditRepository, UserRepository
+from backend.infrastructure.repositories import (
+    AppSettingsRepository, AuditRepository, UserRepository,
+)
 from backend.presentation.dependencies import (
     client_ip, get_current_user, require_admin,
 )
@@ -47,6 +49,41 @@ router = APIRouter(prefix="/auth", tags=["Аутентификация"])
 _DUMMY_HASH = get_password_hash("dummy-password-for-constant-time-comparison")
 
 _ip_attempts: Dict[str, Deque[float]] = defaultdict(deque)
+
+# Проверки кода вне входа — смена пароля и отключение второго фактора.
+# Там уже есть действующая сессия, поэтому счётчик неудачных входов не
+# работает, а перебор шестизначного кода из открытой чужой вкладки — ровно
+# то, от чего второй фактор в этих местах и защищает.
+SECOND_FACTOR_ATTEMPTS = 10
+SECOND_FACTOR_WINDOW_MINUTES = 15
+_code_attempts: Dict[int, Deque[float]] = defaultdict(deque)
+
+
+def _code_attempts_exhausted(user_id: int) -> bool:
+    window = SECOND_FACTOR_WINDOW_MINUTES * 60
+    now = time.monotonic()
+    attempts = _code_attempts[user_id]
+    while attempts and now - attempts[0] > window:
+        attempts.popleft()
+    return len(attempts) >= SECOND_FACTOR_ATTEMPTS
+
+
+def _record_code_attempt(user_id: int) -> None:
+    _code_attempts[user_id].append(time.monotonic())
+
+
+def _clear_code_attempts(user_id: int) -> None:
+    _code_attempts.pop(user_id, None)
+
+
+def _guard_code_attempts(user: SystemUser) -> None:
+    """Отказать, если код в этой сессии подбирают."""
+    if _code_attempts_exhausted(user.id):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Слишком много неверных кодов. Повторите через "
+                   f"{SECOND_FACTOR_WINDOW_MINUTES} минут.",
+        )
 
 
 def _ip_throttled(ip: str) -> bool:
@@ -90,8 +127,9 @@ def _is_locked(user: SystemUser) -> bool:
 
 
 def reset_ip_throttle() -> None:
-    """Сбросить окно попыток по IP. Нужно тестам."""
+    """Сбросить окна попыток. Нужно тестам."""
     _ip_attempts.clear()
+    _code_attempts.clear()
 
 
 def _set_auth_cookies(response: Response, access: str, refresh: str) -> None:
@@ -324,12 +362,53 @@ async def me(current_user: SystemUser = Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 
 @router.get("/totp/status", response_model=TotpStatus)
-async def totp_status(current_user: SystemUser = Depends(get_current_user)):
-    """Включён ли второй фактор и сколько резервных кодов осталось."""
+async def totp_status(
+    current_user: SystemUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Состояние второго фактора у текущего пользователя."""
     return TotpStatus(
         enabled=bool(current_user.totp_enabled),
         recovery_codes_left=len(_recovery_hashes(current_user)),
+        required=AppSettingsRepository(db).totp_required(),
     )
+
+
+@router.get("/totp/policy", response_model=TotpPolicy)
+async def get_totp_policy(
+    current_user: SystemUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Обязателен ли второй фактор всем."""
+    return TotpPolicy(enabled=AppSettingsRepository(db).totp_required())
+
+
+@router.put("/totp/policy", response_model=TotpPolicy)
+async def set_totp_policy(
+    data: TotpPolicy,
+    request: Request,
+    current_user: SystemUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Включить или снять требование второго фактора для всех.
+
+    Права проверяются здесь, а не через require_admin, намеренно: та
+    зависимость сама упирается в это требование, и администратор, у которого
+    приложение ещё не привязано, не смог бы до настройки добраться —
+    получилась бы запертая дверь с ключом внутри.
+    """
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Настройку меняет администратор")
+
+    AppSettingsRepository(db).set_totp_required(data.enabled)
+    AuditRepository(db).record(
+        "totp_policy", "settings", None, current_user.id,
+        "Второй фактор обязателен для всех" if data.enabled
+        else "Второй фактор больше не обязателен",
+        client_ip(request),
+    )
+    return TotpPolicy(enabled=data.enabled)
 
 
 @router.post("/totp/setup", response_model=TotpSetupResponse)
@@ -399,10 +478,24 @@ async def totp_disable(
     """Отключить второй фактор — под пароль и действующий код."""
     if not current_user.totp_enabled:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Второй фактор не включён")
+
+    # Проверяется до кода: иначе резервный код сгорел бы впустую, а отключить
+    # всё равно бы не дали.
+    if AppSettingsRepository(db).totp_required():
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Второй фактор обязателен для всех — сначала снимите требование "
+            "в настройках системы",
+        )
+
+    _guard_code_attempts(current_user)
     if not verify_password(data.password, current_user.hashed_password):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Пароль неверен")
     if not _check_second_factor(current_user, data.code):
+        _record_code_attempt(current_user.id)
+        db.commit()  # гасим резервный код, если он подошёл, но что-то ещё не сошлось
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Код неверен или истёк")
+    _clear_code_attempts(current_user.id)
 
     current_user.totp_enabled = False
     current_user.totp_secret = None
@@ -436,12 +529,17 @@ async def change_password(
 
     # Смена пароля тоже подтверждается кодом: без этого перехваченная сессия
     # позволила бы сменить пароль в обход второго фактора и закрепиться.
-    if current_user.totp_enabled and not _check_second_factor(current_user, data.totp_code):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Код из приложения неверен или истёк",
-            headers={"X-Requires-Totp": "1"},
-        )
+    if current_user.totp_enabled:
+        _guard_code_attempts(current_user)
+        if not _check_second_factor(current_user, data.totp_code):
+            _record_code_attempt(current_user.id)
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Код из приложения неверен или истёк",
+                headers={"X-Requires-Totp": "1"},
+            )
+        _clear_code_attempts(current_user.id)
 
     current_user.hashed_password = get_password_hash(data.new_password)
     db.commit()

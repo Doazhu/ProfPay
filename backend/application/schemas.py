@@ -10,7 +10,9 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import (
+    BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator,
+)
 
 from backend.domain.academic import EducationLevel
 from backend.domain.models import PaymentStatus, SemesterType, UserRole
@@ -34,6 +36,38 @@ def validate_phone(phone: Optional[str]) -> Optional[str]:
     if len(cleaned) < 10:
         raise ValueError("Телефон слишком короткий")
     return cleaned
+
+
+# ---- Пароли ----
+
+# Список короткий намеренно: это не замена подбору по словарю, а отсечка
+# ровно тех паролей, которые ставят «на пять минут» и потом забывают
+# поменять. Рекомендация NIST 800-63B — проверять по списку частых, а не
+# требовать спецсимволы: от требований люди пишут «Пароль1!» и клеят на монитор.
+COMMON_PASSWORDS = {
+    "password", "passw0rd", "p@ssword", "12345678", "123456789", "1234567890",
+    "qwerty123", "qwertyui", "qwerty12", "adminadmin", "administrator",
+    "admin123", "admin1234", "profpay", "profpay123", "profkom", "profkom123",
+    "iloveyou", "welcome1", "letmein1", "changeme", "abc12345", "11111111",
+    "00000000", "987654321", "zaqwsxcde", "пароль123", "парольпароль",
+    "йцукенгш", "ячсмитьбю", "студент123", "бухгалтер", "spbgupts",
+}
+
+
+def validate_password_strength(password: str) -> str:
+    """
+    Отсечь пароли, которые подбираются первым же перебором.
+
+    Требований к составу (цифра, спецсимвол) намеренно нет: они не добавляют
+    стойкости, зато заставляют людей писать пароль на бумажке.
+    """
+    if password.lower() in COMMON_PASSWORDS:
+        raise ValueError("Такой пароль слишком частый — его подберут первым же")
+    if len(set(password)) < 4:
+        raise ValueError("В пароле слишком мало разных символов")
+    if password.isdigit():
+        raise ValueError("Пароль из одних цифр подбирается за минуты — добавьте буквы")
+    return password
 
 
 # ============== Аутентификация ==============
@@ -61,6 +95,8 @@ class TokenResponse(BaseModel):
 class PasswordChange(BaseModel):
     current_password: str = Field(..., min_length=1, max_length=256)
     new_password: str = Field(..., min_length=8, max_length=256)
+
+    _check_new = field_validator("new_password")(validate_password_strength)
     # При включённом втором факторе смена пароля тоже подтверждается кодом:
     # иначе перехваченная сессия позволила бы сменить пароль в обход него.
     totp_code: Optional[str] = Field(None, max_length=20)
@@ -69,6 +105,8 @@ class PasswordChange(BaseModel):
 class AdminPasswordReset(BaseModel):
     """Администратор задаёт пароль другому пользователю."""
     new_password: str = Field(..., min_length=8, max_length=256)
+
+    _check_new = field_validator("new_password")(validate_password_strength)
 
 
 # ---- Второй фактор ----
@@ -97,9 +135,17 @@ class TotpDisableRequest(BaseModel):
 
 
 class TotpStatus(BaseModel):
-    """Включён ли второй фактор и сколько резервных кодов осталось."""
+    """Состояние второго фактора у текущего пользователя."""
     enabled: bool
     recovery_codes_left: int
+    # Требуется ли второй фактор всем по настройке системы. Пока он требуется,
+    # а у человека не привязан, рабочие разделы закрыты.
+    required: bool = False
+
+
+class TotpPolicy(BaseModel):
+    """Настройка «второй фактор обязателен для всех»."""
+    enabled: bool
 
 
 # ============== Пользователи ==============
@@ -115,6 +161,16 @@ class UserCreate(BaseModel):
     @classmethod
     def clean(cls, v):
         return sanitize_string(v)
+
+    _check_password = field_validator("password")(validate_password_strength)
+
+    @model_validator(mode="after")
+    def password_is_not_the_login(self):
+        """Пароль, равный логину или началу почты, не защищает вовсе."""
+        lowered = self.password.lower()
+        if lowered in (self.username.lower(), str(self.email).split("@")[0].lower()):
+            raise ValueError("Пароль не должен совпадать с логином или почтой")
+        return self
 
 
 class UserUpdate(BaseModel):
@@ -450,7 +506,9 @@ class FacultyStats(BaseModel):
     faculty_name: str
     total_payers: int
     paid_count: int
-    unpaid_count: int
+    # Не заплатившие вовсе плюс заплатившие частично — как в сводке наверху
+    # панели и в разделе «Должники».
+    debtors_count: int
     total_amount: Decimal
 
 
