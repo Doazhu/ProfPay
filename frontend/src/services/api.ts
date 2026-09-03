@@ -140,6 +140,12 @@ export const authApi = {
     await api.post('/auth/totp/disable', { password, code });
   },
 
+  /** Выпустить новый набор резервных кодов вместо потерянных. */
+  totpReissueRecoveryCodes: async (password: string, code: string): Promise<string[]> => {
+    const { data } = await api.post('/auth/totp/recovery-codes', { password, code });
+    return data.recovery_codes;
+  },
+
   /** Обязателен ли второй фактор всем. */
   totpPolicy: async (): Promise<boolean> => {
     const { data } = await api.get('/auth/totp/policy');

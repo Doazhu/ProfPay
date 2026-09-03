@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  CheckCircledIcon, ExclamationTriangleIcon, LockClosedIcon,
+  CheckCircledIcon, CopyIcon, DownloadIcon, ExclamationTriangleIcon, LockClosedIcon,
 } from '@radix-ui/react-icons';
 import {
   Badge, Box, Button, Callout, Card, Code, Dialog, Flex, Heading, Text, TextField,
@@ -20,13 +20,35 @@ import PasswordField from './PasswordField';
 interface TwoFactorSettingsProps {
   /** Сообщить наружу, что состояние изменилось — нужно экрану обязательной привязки. */
   onStatusChange?: (status: TotpStatus) => void;
+  /**
+   * На экране показаны резервные коды, и человек их ещё не подтвердил.
+   *
+   * Экран обязательной привязки по этому признаку придерживает переход
+   * в приложение: иначе коды исчезали бы в ту же секунду, как фактор
+   * включился, — прочитать их было некогда, а второй раз их не покажут.
+   */
+  onPendingCodesChange?: (pending: boolean) => void;
+  /**
+   * Убрать собственную рамку.
+   *
+   * На экране обязательной привязки блок лежит внутри стеклянной панели,
+   * и вторая карточка внутри первой смотрится коробкой в коробке.
+   */
+  flush?: boolean;
 }
 
-export default function TwoFactorSettings({ onStatusChange }: TwoFactorSettingsProps = {}) {
+export default function TwoFactorSettings(
+  { onStatusChange, onPendingCodesChange, flush = false }: TwoFactorSettingsProps = {},
+) {
   const [status, setStatus] = useState<TotpStatus | null>(null);
   const [setup, setSetup] = useState<TotpSetup | null>(null);
   const [code, setCode] = useState('');
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
+  // Имя учётной записи запоминается на шаге привязки: в файл с кодами полезно
+  // записать, к чему они, — у человека может быть несколько таких файлов.
+  const [account, setAccount] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -34,6 +56,11 @@ export default function TwoFactorSettings({ onStatusChange }: TwoFactorSettingsP
   const [disableOpen, setDisableOpen] = useState(false);
   const [disablePassword, setDisablePassword] = useState('');
   const [disableCode, setDisableCode] = useState('');
+
+  // Перевыпуск резервных кодов
+  const [reissueOpen, setReissueOpen] = useState(false);
+  const [reissuePassword, setReissuePassword] = useState('');
+  const [reissueCode, setReissueCode] = useState('');
 
   const refresh = () => authApi.totpStatus()
     .then((next) => {
@@ -48,7 +75,9 @@ export default function TwoFactorSettings({ onStatusChange }: TwoFactorSettingsP
     setError('');
     setBusy(true);
     try {
-      setSetup(await authApi.totpSetup());
+      const next = await authApi.totpSetup();
+      setSetup(next);
+      setAccount(next.account);
     } catch (err) {
       setError(extractErrorMessage(err, 'Не удалось начать привязку'));
     } finally {
@@ -60,7 +89,13 @@ export default function TwoFactorSettings({ onStatusChange }: TwoFactorSettingsP
     setError('');
     setBusy(true);
     try {
-      setRecoveryCodes(await authApi.totpEnable(code));
+      const codes = await authApi.totpEnable(code);
+      setRecoveryCodes(codes);
+      setCopied(false);
+      setSaved(false);
+      // Сообщается до обновления статуса: иначе экран обязательной привязки
+      // успеет увидеть «фактор включён» и уйти вместе с кодами.
+      onPendingCodesChange?.(true);
       setSetup(null);
       setCode('');
       await refresh();
@@ -69,6 +104,68 @@ export default function TwoFactorSettings({ onStatusChange }: TwoFactorSettingsP
     } finally {
       setBusy(false);
     }
+  };
+
+  const codesAsText = (codes: string[], account?: string) =>
+    [
+      'Резервные коды ProfPay',
+      account ? `Учётная запись: ${account}` : '',
+      `Выданы: ${new Date().toLocaleString('ru-RU')}`,
+      '',
+      ...codes,
+      '',
+      'Каждый код работает один раз и заменяет код из приложения,',
+      'если телефон потерян. Храните этот файл не на том же телефоне.',
+    ].filter(Boolean).join('\n');
+
+  const copyCodes = async (codes: string[]) => {
+    try {
+      await navigator.clipboard.writeText(codes.join('\n'));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 4000);
+    } catch {
+      // Буфер обмена недоступен по HTTP и в части браузеров — коды всё равно
+      // видны на экране и скачиваются файлом, так что это не тупик.
+      setError('Браузер не дал доступ к буферу. Скачайте файл или перепишите коды.');
+    }
+  };
+
+  const downloadCodes = (codes: string[]) => {
+    const blob = new Blob([codesAsText(codes, account)], {
+      type: 'text/plain;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'profpay-резервные-коды.txt';
+    link.click();
+    URL.revokeObjectURL(url);
+    setSaved(true);
+  };
+
+  const reissue = async () => {
+    setError('');
+    setBusy(true);
+    try {
+      const codes = await authApi.totpReissueRecoveryCodes(reissuePassword, reissueCode);
+      setRecoveryCodes(codes);
+      setCopied(false);
+      setSaved(false);
+      onPendingCodesChange?.(true);
+      setReissueOpen(false);
+      setReissuePassword('');
+      setReissueCode('');
+      await refresh();
+    } catch (err) {
+      setError(extractErrorMessage(err, 'Не удалось выпустить новые коды'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const acknowledgeCodes = () => {
+    setRecoveryCodes(null);
+    onPendingCodesChange?.(false);
   };
 
   const disable = async () => {
@@ -99,8 +196,10 @@ export default function TwoFactorSettings({ onStatusChange }: TwoFactorSettingsP
     ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(setup.qr_svg)}`
     : null;
 
+  const Shell = flush ? Box : Card;
+
   return (
-    <Card size="2" mb="5">
+    <Shell {...(flush ? { mb: '5' as const } : { size: '2' as const, mb: '5' as const })}>
       <Flex align="center" gap="2" mb="1">
         <LockClosedIcon />
         <Heading size="3">Вход по коду из приложения</Heading>
@@ -117,27 +216,64 @@ export default function TwoFactorSettings({ onStatusChange }: TwoFactorSettingsP
         </Callout.Root>
       )}
 
-      {/* Резервные коды показываются ровно один раз */}
+      {/*
+        Резервные коды показываются ровно один раз, поэтому блок держится
+        на экране, пока человек сам его не закроет. Раньше на экране первой
+        привязки он исчезал сразу: фактор включался, и экран уходил
+        в приложение вместе с кодами — прочитать их было некогда.
+      */}
       {recoveryCodes && (
-        <Callout.Root color="amber" mb="3">
-          <Callout.Icon><ExclamationTriangleIcon /></Callout.Icon>
-          <Callout.Text>
-            <Text as="p" weight="medium" mb="2">
-              Сохраните резервные коды — больше они не покажутся.
-            </Text>
-            <Flex wrap="wrap" gap="2" mb="2">
-              {recoveryCodes.map((c) => <Code key={c} size="2">{c}</Code>)}
+        <Box mb="4" p="4" style={{
+          border: '1px solid var(--amber-7)',
+          background: 'var(--amber-2)',
+          borderRadius: 'var(--radius-4)',
+        }}>
+          <Flex align="center" gap="2" mb="1">
+            <ExclamationTriangleIcon color="var(--amber-11)" />
+            <Heading size="3">Сохраните резервные коды</Heading>
+          </Flex>
+          <Text as="p" size="2" color="gray" mb="3">
+            Второй раз они не покажутся: в базе остаются только их отпечатки.
+            Каждый код срабатывает один раз и заменяет код из приложения,
+            если телефон потерян или разряжен.
+          </Text>
+
+          {/* Моноширинные, в две колонки — так их удобно переписывать с экрана */}
+          <Box mb="3" p="3" style={{
+            background: 'var(--color-panel-solid)',
+            borderRadius: 'var(--radius-3)',
+          }}>
+            <Flex wrap="wrap" gap="2">
+              {recoveryCodes.map((value) => (
+                <Code key={value} size="3" variant="ghost"
+                      style={{ minWidth: 96, letterSpacing: '0.04em' }}>
+                  {value}
+                </Code>
+              ))}
             </Flex>
-            <Text as="p" size="1">
-              Каждый работает один раз и заменяет код из приложения, если
-              телефон потерян. В базе хранятся только их отпечатки.
-            </Text>
-            <Button size="1" variant="soft" mt="2"
-                    onClick={() => setRecoveryCodes(null)}>
-              Я записал
+          </Box>
+
+          <Flex gap="2" wrap="wrap" mb="3">
+            <Button variant="soft" onClick={() => downloadCodes(recoveryCodes)}>
+              <DownloadIcon /> Скачать файлом
             </Button>
-          </Callout.Text>
-        </Callout.Root>
+            <Button variant="soft" color="gray" onClick={() => copyCodes(recoveryCodes)}>
+              <CopyIcon /> {copied ? 'Скопировано' : 'Скопировать'}
+            </Button>
+            <Button variant="soft" color="gray" onClick={() => window.print()}>
+              Распечатать
+            </Button>
+          </Flex>
+
+          <Text as="p" size="1" color="gray" mb="3">
+            Держите их не на том же телефоне, где стоит приложение: смысл
+            резервных кодов в том, чтобы войти, когда телефона под рукой нет.
+          </Text>
+
+          <Button onClick={acknowledgeCodes}>
+            {saved ? 'Готово, коды сохранены' : 'Я сохранил коды — продолжить'}
+          </Button>
+        </Box>
       )}
 
       {/* Шаг привязки */}
@@ -193,6 +329,9 @@ export default function TwoFactorSettings({ onStatusChange }: TwoFactorSettingsP
                 Резервных кодов осталось: <Text weight="medium">{status.recovery_codes_left}</Text>
               </Text>
             </Flex>
+            <Button variant="soft" color="gray" onClick={() => setReissueOpen(true)}>
+              Новые резервные коды
+            </Button>
             {status.required ? (
               <Text size="1" color="gray">
                 Отключить нельзя: второй фактор обязателен для всех
@@ -214,6 +353,47 @@ export default function TwoFactorSettings({ onStatusChange }: TwoFactorSettingsP
         Восстановления пароля по почте нет — почтовый сервер для этого не нужен.
         Если пароль забыт, его задаёт другой администратор в разделе «Пользователи».
       </Text>
+
+      {/* Перевыпуск: старый набор гаснет целиком */}
+      <Dialog.Root open={reissueOpen} onOpenChange={setReissueOpen}>
+        <Dialog.Content maxWidth="420px">
+          <Dialog.Title>Новые резервные коды</Dialog.Title>
+          <Dialog.Description size="2" color="gray" mb="4">
+            Прежние восемь перестанут работать все сразу — иначе новый набор
+            не уменьшал бы риск. Подтвердите, что это вы.
+          </Dialog.Description>
+
+          <Flex direction="column" gap="3">
+            <Box>
+              <Text as="label" size="1" weight="medium" color="gray" mb="1"
+                    style={{ display: 'block' }}>
+                Пароль
+              </Text>
+              <PasswordField value={reissuePassword} onChange={setReissuePassword}
+                             autoComplete="current-password" />
+            </Box>
+            <Box>
+              <Text as="label" size="1" weight="medium" color="gray" mb="1"
+                    style={{ display: 'block' }}>
+                Код из приложения
+              </Text>
+              <TextField.Root value={reissueCode} onChange={(e) => setReissueCode(e.target.value)}
+                              placeholder="000000" inputMode="numeric" maxLength={20}
+                              style={{ width: 140, letterSpacing: '0.15em' }} />
+            </Box>
+          </Flex>
+
+          <Flex gap="3" mt="4" justify="end">
+            <Dialog.Close>
+              <Button variant="soft" color="gray">Отмена</Button>
+            </Dialog.Close>
+            <Button onClick={reissue}
+                    disabled={!reissuePassword || reissueCode.length < 6 || busy}>
+              Выпустить
+            </Button>
+          </Flex>
+        </Dialog.Content>
+      </Dialog.Root>
 
       {/* Отключение: под пароль и действующий код */}
       <Dialog.Root open={disableOpen} onOpenChange={setDisableOpen}>
@@ -254,6 +434,6 @@ export default function TwoFactorSettings({ onStatusChange }: TwoFactorSettingsP
           </Flex>
         </Dialog.Content>
       </Dialog.Root>
-    </Card>
+    </Shell>
   );
 }

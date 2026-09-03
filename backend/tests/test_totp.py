@@ -434,3 +434,85 @@ def test_admin_without_second_factor_can_still_drop_requirement(auth_client, adm
     assert auth_client.get(f"{API}/settings/faculties").status_code in (403, 404)
     assert auth_client.put(f"{API}/auth/totp/policy", json={"enabled": False}).status_code == 200
     assert auth_client.get(f"{API}/payers").status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Перевыпуск резервных кодов
+# ---------------------------------------------------------------------------
+
+def test_recovery_codes_can_be_reissued(auth_client, admin):
+    """
+    Коды показываются один раз, а отключить фактор при обязательном требовании
+    нельзя — без перевыпуска потерянные коды означали бы, что один потерянный
+    телефон отрезает человека от системы.
+    """
+    secret, old_codes = enable_totp(auth_client)
+
+    response = auth_client.post(f"{API}/auth/totp/recovery-codes", json={
+        "password": ADMIN_PASSWORD, "code": code_for(secret),
+    })
+    assert response.status_code == 200, response.text
+
+    new_codes = response.json()["recovery_codes"]
+    assert len(new_codes) == 8
+    assert not set(new_codes) & set(old_codes)
+    assert auth_client.get(f"{API}/auth/totp/status").json()["recovery_codes_left"] == 8
+
+
+def test_reissued_set_replaces_the_old_one(client, admin):
+    """Старые коды гаснут все разом, иначе перевыпуск не снижал бы риск."""
+    client.post(f"{API}/auth/login", json={"username": "admin", "password": ADMIN_PASSWORD})
+    secret, old_codes = enable_totp(client)
+    client.post(f"{API}/auth/totp/recovery-codes", json={
+        "password": ADMIN_PASSWORD, "code": code_for(secret),
+    })
+
+    client.post(f"{API}/auth/logout")
+    client.cookies.clear()
+    assert client.post(f"{API}/auth/login", json={
+        "username": "admin", "password": ADMIN_PASSWORD, "totp_code": old_codes[0],
+    }).status_code == 401
+
+
+def test_reissue_requires_password_and_code(auth_client, admin):
+    secret, _ = enable_totp(auth_client)
+
+    assert auth_client.post(f"{API}/auth/totp/recovery-codes", json={
+        "password": "неверный", "code": code_for(secret),
+    }).status_code == 400
+    assert auth_client.post(f"{API}/auth/totp/recovery-codes", json={
+        "password": ADMIN_PASSWORD, "code": "000000",
+    }).status_code == 400
+
+
+def test_reissue_works_while_second_factor_is_required(auth_client, admin):
+    """Именно этот случай и был тупиком: отключить нельзя, а коды потеряны."""
+    secret, _ = enable_totp(auth_client)
+    auth_client.put(f"{API}/auth/totp/policy", json={"enabled": True})
+
+    assert auth_client.post(f"{API}/auth/totp/disable", json={
+        "password": ADMIN_PASSWORD, "code": code_for(secret),
+    }).status_code == 400  # отключить не дают
+
+    assert auth_client.post(f"{API}/auth/totp/recovery-codes", json={
+        "password": ADMIN_PASSWORD, "code": code_for(secret),
+    }).status_code == 200  # а новые коды выпустить можно
+
+
+def test_code_guessing_outside_login_is_limited(auth_client, admin):
+    """
+    Перебор кода вне входа упирается в отдельный счётчик: блокировка учётной
+    записи здесь не работает — сессия уже открыта.
+    """
+    from backend.presentation.auth_api import SECOND_FACTOR_ATTEMPTS
+
+    enable_totp(auth_client)
+    for _ in range(SECOND_FACTOR_ATTEMPTS):
+        auth_client.post(f"{API}/auth/totp/recovery-codes", json={
+            "password": ADMIN_PASSWORD, "code": "000000",
+        })
+
+    blocked = auth_client.post(f"{API}/auth/totp/recovery-codes", json={
+        "password": ADMIN_PASSWORD, "code": "000000",
+    })
+    assert blocked.status_code == 429

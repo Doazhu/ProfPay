@@ -7,6 +7,9 @@ import {
 import type { TotpStatus } from '../types';
 import { authApi, extractErrorMessage } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../theme/ThemeContext';
+import { ThemeToggleButton } from './ThemeToggle';
+import LoginBackground from './LoginBackground';
 import TwoFactorSettings from './TwoFactorSettings';
 
 /**
@@ -23,8 +26,12 @@ import TwoFactorSettings from './TwoFactorSettings';
  */
 export default function TotpGate({ children }: { children: ReactNode }) {
   const { logout, user } = useAuth();
+  const { resolvedAppearance } = useTheme();
   const [status, setStatus] = useState<TotpStatus | null>(null);
   const [failed, setFailed] = useState(false);
+  // На экране висят только что выданные резервные коды. Пока человек их
+  // не подтвердил, в приложение не уходим — второй раз коды не покажут.
+  const [codesPending, setCodesPending] = useState(false);
   const [policyError, setPolicyError] = useState('');
   const [droppingPolicy, setDroppingPolicy] = useState(false);
 
@@ -44,7 +51,7 @@ export default function TotpGate({ children }: { children: ReactNode }) {
     return <div className="spinner-container"><div className="spinner w-8 h-8" /></div>;
   }
 
-  if (failed || !status || status.enabled || !status.required) {
+  if (failed || !status || (status.enabled && !codesPending) || !status.required) {
     return <>{children}</>;
   }
 
@@ -66,21 +73,35 @@ export default function TotpGate({ children }: { children: ReactNode }) {
     }
   };
 
+  /*
+    Фон здесь тот же, что на входе, и по той же причине: человек ещё не внутри
+    системы — он на пороге. В рабочих разделах такой фон только мешал бы
+    читать таблицы, поэтому дальше его нет.
+  */
   return (
-    <Box
-      style={{ minHeight: '100vh', background: 'var(--color-background)' }}
-      className="animate-fade-in"
-    >
-      <Flex align="center" justify="center" style={{ minHeight: '100vh' }} p="4">
-        <Box style={{ width: '100%', maxWidth: 620 }}>
+    <>
+      <LoginBackground appearance={resolvedAppearance} />
+
+      <Box style={{ position: 'fixed', top: 16, right: 16, zIndex: 2 }}>
+        <ThemeToggleButton />
+      </Box>
+
+      <div className="login-shell login-shell--tall">
+        <div className="login-glass login-glass--wide animate-fade-in">
           <Flex align="center" gap="2" mb="1">
             <LockClosedIcon width="18" height="18" />
-            <Heading size="6">Настройте вход по коду</Heading>
+            <Heading size="6">
+              {codesPending ? 'Почти всё' : 'Настройте вход по коду'}
+            </Heading>
           </Flex>
           <Text as="p" size="2" color="gray" mb="4">
-            {user?.full_name ? `${user.full_name}, вход` : 'Вход'} в ProfPay защищён
-            вторым фактором для всех учётных записей. Привяжите приложение —
-            дальше оно будет спрашивать шестизначный код при каждом входе.
+            {codesPending
+              ? 'Приложение привязано. Остался один шаг — сохранить резервные '
+                + 'коды: они понадобятся, если телефон окажется недоступен.'
+              : `${user?.full_name ? `${user.full_name}, вход` : 'Вход'} в ProfPay `
+                + 'защищён вторым фактором для всех учётных записей. Привяжите '
+                + 'приложение — дальше оно будет спрашивать шестизначный код '
+                + 'при каждом входе.'}
           </Text>
 
           {policyError && (
@@ -89,10 +110,16 @@ export default function TotpGate({ children }: { children: ReactNode }) {
             </Callout.Root>
           )}
 
-          <TwoFactorSettings onStatusChange={setStatus} />
+          <TwoFactorSettings
+            flush
+            onStatusChange={setStatus}
+            onPendingCodesChange={setCodesPending}
+          />
 
           <Flex gap="3" align="center" wrap="wrap">
-            <Button variant="soft" color="gray" onClick={logout}>
+            {/* Пока коды не сохранены, уходить с экрана нечем: выход отсюда
+                означал бы потерю кодов навсегда. */}
+            <Button variant="soft" color="gray" onClick={logout} disabled={codesPending}>
               <ExitIcon />
               Выйти
             </Button>
@@ -101,7 +128,7 @@ export default function TotpGate({ children }: { children: ReactNode }) {
                 variant="ghost"
                 color="gray"
                 onClick={dropRequirement}
-                disabled={droppingPolicy}
+                disabled={droppingPolicy || codesPending}
               >
                 Не требовать второй фактор от всех
               </Button>
@@ -114,8 +141,8 @@ export default function TotpGate({ children }: { children: ReactNode }) {
               записи защищены только паролем.
             </Text>
           )}
-        </Box>
-      </Flex>
-    </Box>
+        </div>
+      </div>
+    </>
   );
 }

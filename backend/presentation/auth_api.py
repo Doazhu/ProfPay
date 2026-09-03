@@ -468,6 +468,47 @@ async def totp_enable(
     return TotpEnableResponse(recovery_codes=codes)
 
 
+@router.post("/totp/recovery-codes", response_model=TotpEnableResponse)
+async def regenerate_recovery_codes(
+    data: TotpDisableRequest,
+    request: Request,
+    current_user: SystemUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Выпустить новый набор резервных кодов взамен старого.
+
+    Нужно, когда коды потеряны: показываются они один раз, а отключить и
+    заново привязать фактор нельзя, пока он обязателен для всех. Без этой
+    ручки человек оставался бы с работающим приложением, но без запасного
+    входа — и один потерянный телефон отрезал бы его от системы.
+
+    Условия те же, что для отключения: пароль и действующий код. Старые коды
+    гаснут все разом, иначе выпуск нового набора не уменьшал бы риск.
+    """
+    if not current_user.totp_enabled:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Второй фактор не включён")
+
+    _guard_code_attempts(current_user)
+    if not verify_password(data.password, current_user.hashed_password):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Пароль неверен")
+    if not _check_second_factor(current_user, data.code):
+        _record_code_attempt(current_user.id)
+        db.commit()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Код неверен или истёк")
+    _clear_code_attempts(current_user.id)
+
+    codes = totp_service.generate_recovery_codes()
+    _store_recovery_hashes(current_user, [totp_service.hash_recovery_code(c) for c in codes])
+    db.commit()
+
+    AuditRepository(db).record(
+        "totp_recovery_reissued", "user", current_user.id, current_user.id,
+        "Выпущен новый набор резервных кодов", client_ip(request),
+    )
+    return TotpEnableResponse(recovery_codes=codes)
+
+
 @router.post("/totp/disable")
 async def totp_disable(
     data: TotpDisableRequest,

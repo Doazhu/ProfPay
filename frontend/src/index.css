@@ -428,10 +428,23 @@ table, .tabular, input[type="number"] { font-variant-numeric: tabular-nums; }
 }
 
 /*
+  Экран привязки приложения выше карточки входа: в нём QR, ключ и восемь
+  резервных кодов. По центру он бы упирался в края на ноутбуке, поэтому
+  прижимается к верху и прокручивается.
+*/
+.login-shell--tall { align-items: flex-start; padding-top: var(--space-7); }
+
+/*
   Матовое стекло. Цвета заданы вручную, а не взяты из --color-panel-translucent:
   в тёмной теме тот токен почти прозрачен и рассчитан на спокойный фон, а
   здесь под карточкой движется графика, и текст на ней должен читаться.
 */
+/*
+  Широкий вариант — для экрана привязки приложения: там внутри QR-код,
+  ключ и восемь резервных кодов, в 400 px это не укладывается.
+*/
+
+
 .login-glass {
   --glass-bg: rgba(255, 255, 255, 0.7);
   --glass-border: rgba(255, 255, 255, 0.6);
@@ -450,6 +463,9 @@ table, .tabular, input[type="number"] { font-variant-numeric: tabular-nums; }
   -webkit-backdrop-filter: blur(24px) saturate(150%);
   backdrop-filter: blur(24px) saturate(150%);
 }
+
+/* Экран привязки шире: в 400 px не умещаются QR, ключ и восемь кодов. */
+.login-glass--wide { max-width: 660px; }
 
 .dark .login-glass,
 .dark-theme .login-glass {
