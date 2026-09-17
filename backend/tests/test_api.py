@@ -24,7 +24,10 @@ def make_payer(client, faculty_id=None, **overrides):
         "telegram": "@doazhu", "vk": "vk.com/doazhu",
         "group_name": "1-мд-35", "department": "ЦИАТ",
         "admission_year": academic_year_start(), "education_level": "bachelor",
-        "is_budget": True, "stipend_amount": "2500.00", "budget_percent": "1",
+        # Внебюджетник по умолчанию: бюджетнику взнос удерживается из стипендии
+        # автоматически, и тесты про оплату проверяли бы не то, что задумано.
+        # Кому нужен бюджетник — передаёт is_budget=True явно.
+        "is_budget": False, "stipend_amount": "2500.00", "budget_percent": "1",
         "notes": "примечание с 'кавычками'",
         "faculty_id": faculty_id,
     }
@@ -523,3 +526,137 @@ def test_incomplete_filter_combines_with_other_filters(auth_client, faculty):
                            params={"incomplete": "true", "search": "Иванов"}).json()
     assert page["total"] == 1
     assert page["items"][0]["last_name"] == "Иванов"
+
+
+# ---------------------------------------------------------------------------
+# Бюджетники: взнос удерживается из стипендии
+# ---------------------------------------------------------------------------
+
+def test_budget_payer_gets_the_withheld_payment(auth_client, faculty, year_settings):
+    """
+    У бюджетника взнос удерживают из стипендии — деньги уже собраны, и в
+    должниках ему делать нечего.
+    """
+    created = make_payer(auth_client, faculty.id, email=None, is_budget=True)
+    assert created["status"] == "paid"
+
+    payments = auth_client.get(f"{API}/payers/{created['id']}/payments").json()
+    assert len(payments) == 1
+    assert str(payments[0]["amount"]) == "240.00"          # 120 осень + 120 весна
+    assert payments[0]["payment_method"] == "Удержание из стипендии"
+
+    # Сумма попадает в общий сбор, а не только в статус.
+    assert auth_client.get(f"{API}/stats/dashboard").json()["total_paid_amount"] == "240.00"
+
+
+def test_non_budget_payer_gets_nothing(auth_client, faculty, year_settings):
+    created = make_payer(auth_client, faculty.id, email=None, is_budget=False)
+    assert created["status"] == "unpaid"
+    assert auth_client.get(f"{API}/payers/{created['id']}/payments").json() == []
+
+
+def test_marking_budget_later_records_the_payment(auth_client, faculty, year_settings):
+    created = make_payer(auth_client, faculty.id, email=None, is_budget=False)
+    updated = auth_client.put(f"{API}/payers/{created['id']}", json={"is_budget": True}).json()
+
+    assert updated["status"] == "paid"
+    assert len(auth_client.get(f"{API}/payers/{created['id']}/payments").json()) == 1
+
+
+def test_withholding_is_not_duplicated(auth_client, faculty, year_settings):
+    """Повторное сохранение карточки не должно добавлять второй платёж."""
+    created = make_payer(auth_client, faculty.id, email=None, is_budget=True)
+    for _ in range(3):
+        auth_client.put(f"{API}/payers/{created['id']}", json={"is_budget": True})
+
+    assert len(auth_client.get(f"{API}/payers/{created['id']}/payments").json()) == 1
+
+
+def test_no_withholding_without_year_amounts(auth_client, faculty):
+    """
+    Суммы на год не заданы — придумывать их нельзя, поэтому платёж
+    не создаётся, а человек остаётся неоплаченным.
+    """
+    created = make_payer(auth_client, faculty.id, email=None, is_budget=True)
+    assert auth_client.get(f"{API}/payers/{created['id']}/payments").json() == []
+    assert created["status"] == "unpaid"
+
+
+def test_bulk_withholding_covers_existing_payers(auth_client, faculty, year_settings):
+    """Заведённым раньше платёж проводится кнопкой, а не переоткрытием карточки."""
+    from backend.core.database import SessionLocal
+    from backend.domain.models import Payer
+
+    # Заводим бюджетников в обход API — как это сделал импорт из таблицы.
+    session = SessionLocal()
+    for surname in ("Первый", "Второй"):
+        session.add(Payer(last_name=surname, first_name="Бюджетный",
+                          is_budget=True, is_active=True,
+                          admission_year=academic_year_start(), education_level="bachelor"))
+    session.commit()
+    session.close()
+
+    result = auth_client.post(f"{API}/budget-settings/withhold").json()
+    assert result["created"] == 2
+    assert str(result["amount"]) == "240.00"
+
+    # Второй запуск ничего не добавляет.
+    again = auth_client.post(f"{API}/budget-settings/withhold").json()
+    assert again["created"] == 0
+    assert again["already_had"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Шаблон бюджетника
+# ---------------------------------------------------------------------------
+
+def test_template_is_only_a_template_by_default(auth_client, faculty, year_settings):
+    """Без подтверждения шаблон не трогает заведённых."""
+    created = make_payer(auth_client, faculty.id, email=None, is_budget=True,
+                         stipend_amount="2500.00", budget_percent="1")
+
+    saved = auth_client.put(f"{API}/budget-settings", json={
+        "default_stipend_amount": "9999", "default_budget_percent": "2",
+    }).json()
+    assert saved["applied_to"] == 0
+
+    payer = auth_client.get(f"{API}/payers/{created['id']}").json()
+    assert str(payer["stipend_amount"]) == "2500.00"
+
+
+def test_template_can_be_applied_to_everyone(auth_client, faculty, year_settings):
+    budget = make_payer(auth_client, faculty.id, email=None, last_name="Бюджетный",
+                        is_budget=True, stipend_amount="2500.00", budget_percent="1")
+    regular = make_payer(auth_client, faculty.id, email=None, last_name="Обычный",
+                         is_budget=False)
+
+    saved = auth_client.put(f"{API}/budget-settings", json={
+        "default_stipend_amount": "9999", "default_budget_percent": "2",
+        "apply_to_existing": True,
+    }).json()
+    assert saved["applied_to"] == 1
+
+    changed = auth_client.get(f"{API}/payers/{budget['id']}").json()
+    assert str(changed["stipend_amount"]) == "9999.00"
+    assert str(changed["budget_percent"]) == "2.00"
+
+    # Небюджетников это не касается — значения остались прежними.
+    untouched = auth_client.get(f"{API}/payers/{regular['id']}").json()
+    assert str(untouched["stipend_amount"]) == "2500.00"
+    assert str(untouched["budget_percent"]) == "1.00"
+
+
+def test_impact_counts_who_will_be_overwritten(auth_client, faculty, year_settings):
+    """Диалог подтверждения должен честно сказать, скольких перезапишет."""
+    make_payer(auth_client, faculty.id, email=None, last_name="Совпадает",
+               is_budget=True, stipend_amount="9999", budget_percent="2")
+    make_payer(auth_client, faculty.id, email=None, last_name="Отличается",
+               is_budget=True, stipend_amount="2500", budget_percent="1")
+    make_payer(auth_client, faculty.id, email=None, last_name="Пустой",
+               is_budget=True, stipend_amount=None, budget_percent=None)
+
+    impact = auth_client.get(f"{API}/budget-settings/impact",
+                             params={"stipend": "9999", "percent": "2"}).json()
+    assert impact["budget_payers"] == 3
+    assert impact["differing"] == 1
+    assert impact["without_values"] == 1

@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { LockClosedIcon } from '@radix-ui/react-icons';
 import {
-  Badge, Box, Callout, Card, Flex, Heading, Link, RadioCards, Switch, Text,
+  AlertDialog, Badge, Box, Button, Callout, Card, Flex, Heading, Link, RadioCards,
+  Separator, Switch, Text,
 } from '@radix-ui/themes';
 import { ThemeAppearanceControl } from '../components/ThemeToggle';
 import { useTheme, type Skin } from '../theme/ThemeContext';
@@ -10,7 +11,37 @@ import type { Faculty, PaymentSettings, BudgetSettings } from '../types';
 import {
   authApi, facultyApi, paymentSettingsApi, budgetSettingsApi, extractErrorMessage,
 } from '../services/api';
+import type { BudgetImpact, WithholdingResult } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+
+/**
+ * Что именно произойдёт, если применить шаблон ко всем.
+ *
+ * Фраза собирается по месту: «у 0 значения отличаются и будут перезаписаны»
+ * читается как ошибка, а человек в этот момент решает, трогать ли 156 карточек.
+ */
+function describeImpact(impact: BudgetImpact | null): string {
+  if (impact === null) {
+    return 'Шаблон подставляется в форму добавления. Можно ещё и переписать '
+      + 'значения у всех, кто уже заведён.';
+  }
+  if (impact.budget_payers === 0) {
+    return 'Заведённых бюджетников пока нет — шаблон просто сохранится.';
+  }
+
+  const parts = [`Бюджетников: ${impact.budget_payers}.`];
+  if (impact.without_values > 0) {
+    parts.push(`У ${impact.without_values} стипендия и процент не заполнены — им проставится шаблон.`);
+  }
+  if (impact.differing > 0) {
+    parts.push(`У ${impact.differing} значения отличаются от нового шаблона и будут `
+      + 'перезаписаны, включая проставленные вручную.');
+  }
+  if (impact.differing === 0 && impact.without_values === 0) {
+    parts.push('У всех уже стоят эти значения — менять нечего.');
+  }
+  return parts.join(' ');
+}
 
 /** Возвращает текущий учебный год в формате "2025-2026" */
 function getCurrentAcademicYear(): string {
@@ -43,6 +74,14 @@ export default function SettingsPage() {
   });
   const [budgetSaving, setBudgetSaving] = useState(false);
   const [budgetSaved, setBudgetSaved] = useState(false);
+  // Применение шаблона ко всем — действие с последствиями, поэтому
+  // перед ним спрашиваем и показываем, скольких оно затронет.
+  const [budgetImpact, setBudgetImpact] = useState<BudgetImpact | null>(null);
+  const [budgetConfirmOpen, setBudgetConfirmOpen] = useState(false);
+  const [withholding, setWithholding] = useState(false);
+  const [withholdResult, setWithholdResult] = useState<WithholdingResult | null>(null);
+  const [budgetError, setBudgetError] = useState('');
+  const [budgetNotice, setBudgetNotice] = useState('');
 
   // Payment settings form — текущий год по умолчанию
   const [newAcademicYear, setNewAcademicYear] = useState(getCurrentAcademicYear());
@@ -56,6 +95,27 @@ export default function SettingsPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  /** Сохранить шаблон; applyToAll — ещё и переписать значения у заведённых. */
+  const saveBudgetSettings = async (applyToAll: boolean) => {
+    setBudgetSaving(true);
+    setBudgetSaved(false);
+    setBudgetError('');
+    try {
+      const result = await budgetSettingsApi.update(budgetSettings, applyToAll);
+      setBudgetConfirmOpen(false);
+      setBudgetSaved(true);
+      if (applyToAll && result.applied_to > 0) {
+        setBudgetNotice(`Шаблон применён к ${result.applied_to} записям`);
+        window.setTimeout(() => setBudgetNotice(''), 6000);
+      }
+      window.setTimeout(() => setBudgetSaved(false), 3000);
+    } catch (err) {
+      setBudgetError(extractErrorMessage(err, 'Не удалось сохранить настройки'));
+    } finally {
+      setBudgetSaving(false);
+    }
+  };
 
   const loadData = async () => {
     setIsLoading(true);
@@ -529,44 +589,117 @@ export default function SettingsPage() {
           </div>
 
           {budgetSettings.default_stipend_amount && budgetSettings.default_budget_percent && (
-            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg max-w-lg">
-              <p className="text-sm text-blue-800">
-                При стипендии <strong>{budgetSettings.default_stipend_amount} руб.</strong> и проценте <strong>{budgetSettings.default_budget_percent}%</strong>,
-                к оплате: <strong className="text-primary">
+            <Callout.Root color="gray" variant="surface" mt="4" style={{ maxWidth: 520 }}>
+              <Callout.Text>
+                {budgetSettings.default_budget_percent}% от стипендии{' '}
+                {budgetSettings.default_stipend_amount} ₽ — это{' '}
+                <strong>
                   {new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 2 }).format(
                     Math.round(parseFloat(budgetSettings.default_stipend_amount) * parseFloat(budgetSettings.default_budget_percent)) / 100
                   )}
-                </strong>
-              </p>
-            </div>
+                </strong>{' '}
+                в месяц. Это справка: сколько удерживает бухгалтерия вуза.
+                Сумма самого взноса берётся не отсюда, а со вкладки «Оплата».
+              </Callout.Text>
+            </Callout.Root>
           )}
 
-          <div className="mt-6 flex items-center gap-3">
-            <button
+          {budgetError && (
+            <Callout.Root color="red" mt="4">
+              <Callout.Text>{budgetError}</Callout.Text>
+            </Callout.Root>
+          )}
+          {budgetNotice && (
+            <Callout.Root color="green" mt="4">
+              <Callout.Text>{budgetNotice}</Callout.Text>
+            </Callout.Root>
+          )}
+
+          <Flex mt="5" gap="3" align="center" wrap="wrap">
+            <Button
               onClick={async () => {
-                setBudgetSaving(true);
-                setBudgetSaved(false);
-                try {
-                  await budgetSettingsApi.update(budgetSettings);
-                  setBudgetSaved(true);
-                  setTimeout(() => setBudgetSaved(false), 3000);
-                } catch (error) {
-                  console.error('Failed to save budget settings:', error);
-                } finally {
-                  setBudgetSaving(false);
-                }
+                // Сколько записей затронет — узнаём до диалога, чтобы
+                // спрашивать по существу, а не «применить ко всем?».
+                setBudgetImpact(await budgetSettingsApi.impact(budgetSettings).catch(() => null));
+                setBudgetConfirmOpen(true);
               }}
               disabled={budgetSaving}
-              className="btn-primary disabled:opacity-50"
             >
-              {budgetSaving ? 'Сохранение...' : 'Сохранить'}
-            </button>
+              {budgetSaving ? 'Сохраняем…' : 'Сохранить'}
+            </Button>
             {budgetSaved && (
-              <span className="text-green-600 text-sm animate-fade-in">Сохранено</span>
+              <Text size="2" color="green" className="animate-fade-in">Сохранено</Text>
             )}
-          </div>
+          </Flex>
+
+          <Separator my="5" size="4" />
+
+          {/* Взносы, удержанные из стипендии */}
+          <Heading size="3" mb="1">Взносы из стипендии</Heading>
+          <Text as="p" size="2" color="gray" mb="3">
+            У бюджетника взнос удерживают из стипендии, поэтому при добавлении
+            карточки платёж за год записывается сам. Тем, кто уже заведён —
+            например, загружен из таблицы, — его проводит эта кнопка.
+            Повторный запуск безопасен: у кого платёж за год уже есть, того пропустит.
+          </Text>
+
+          {withholdResult && (
+            <Callout.Root color={withholdResult.amount === null ? 'amber' : 'green'} mb="3">
+              <Callout.Text>
+                {withholdResult.amount === null
+                  ? 'Суммы взносов на этот учебный год не заданы — сначала задайте их '
+                    + 'на вкладке «Оплата», иначе неизвестно, какую сумму проводить.'
+                  : `Проведено за ${withholdResult.academic_year}: ${withholdResult.created}. `
+                    + `Уже было у ${withholdResult.already_had}. `
+                    + `Сумма каждого платежа — ${withholdResult.amount} ₽.`}
+              </Callout.Text>
+            </Callout.Root>
+          )}
+
+          <Button
+            variant="soft"
+            disabled={withholding}
+            onClick={async () => {
+              setWithholding(true);
+              try {
+                setWithholdResult(await budgetSettingsApi.withhold());
+              } catch (error) {
+                setBudgetError(extractErrorMessage(error, 'Не удалось провести взносы'));
+              } finally {
+                setWithholding(false);
+              }
+            }}
+          >
+            {withholding ? 'Проводим…' : 'Провести взносы всем бюджетникам'}
+          </Button>
         </div>
       )}
+
+      {/* Что делать с шаблоном: только сохранить или ещё и применить */}
+      <AlertDialog.Root open={budgetConfirmOpen} onOpenChange={setBudgetConfirmOpen}>
+        <AlertDialog.Content maxWidth="520px">
+          <AlertDialog.Title>Применить к заведённым бюджетникам?</AlertDialog.Title>
+          <AlertDialog.Description size="2">
+            {describeImpact(budgetImpact)}
+          </AlertDialog.Description>
+
+          <Flex gap="3" mt="4" justify="end" wrap="wrap">
+            <AlertDialog.Cancel>
+              <Button variant="soft" color="gray">Отмена</Button>
+            </AlertDialog.Cancel>
+            <Button
+              variant="soft"
+              onClick={() => saveBudgetSettings(false)}
+              disabled={budgetSaving}
+            >
+              Только шаблон
+            </Button>
+            <Button onClick={() => saveBudgetSettings(true)} disabled={budgetSaving}>
+              Применить ко всем
+            </Button>
+          </Flex>
+        </AlertDialog.Content>
+      </AlertDialog.Root>
 
       {/* Где теперь лежит ключ шифрования */}
       <div className="card mt-5">

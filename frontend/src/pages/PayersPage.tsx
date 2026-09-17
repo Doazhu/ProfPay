@@ -4,8 +4,7 @@ import {
   DownloadIcon, ExclamationTriangleIcon, MagnifyingGlassIcon, PlusIcon,
 } from '@radix-ui/react-icons';
 import {
-  Badge, Button, Card, Checkbox, Flex, Heading, Select, Spinner, Text, TextField,
-  Tooltip,
+  Badge, Button, Card, Flex, Heading, Select, Spinner, Text, TextField, Tooltip,
 } from '@radix-ui/themes';
 import type { Payer, Faculty, PaymentStatus } from '../types';
 import { payerApi, facultyApi, exportApi } from '../services/api';
@@ -48,6 +47,27 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
   const search = searchParams.get('search') || '';
   const archiveMode = (searchParams.get('archive') || defaultArchive) as 'active' | 'archived' | 'all';
   const incompleteOnly = searchParams.get('incomplete') === '1';
+
+  /*
+    Одна выпадашка на «что показываем»: архив и неполные данные — это срезы
+    одного списка, и двумя отдельными переключателями рядом их путали.
+    «Неполные» берутся без архива: разбираться с выпустившимися смысла нет.
+  */
+  const viewMode = incompleteOnly ? 'incomplete' : archiveMode;
+
+  const changeView = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('page');
+    if (value === 'incomplete') {
+      next.set('incomplete', '1');
+      next.delete('archive');
+    } else {
+      next.delete('incomplete');
+      if (value === defaultArchive) next.delete('archive');
+      else next.set('archive', value);
+    }
+    setSearchParams(next);
+  };
 
   useEffect(() => {
     loadFilters();
@@ -193,27 +213,20 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
           </Select.Root>
 
           {/* Выпустившиеся по умолчанию скрыты */}
-          <Select.Root value={archiveMode} onValueChange={(v) => updateFilter('archive', v)}>
-            <Select.Trigger style={{ flex: '1 1 170px' }} aria-label="Архив" />
+          <Select.Root value={viewMode} onValueChange={changeView}>
+            <Select.Trigger style={{ flex: '1 1 190px' }} aria-label="Что показывать" />
             <Select.Content>
               <Select.Item value="active">Без архива</Select.Item>
               <Select.Item value="archived">Только архив</Select.Item>
               <Select.Item value="all">Все, включая архив</Select.Item>
+              {/*
+                Записи с пробелами надо уметь находить: загруженные из таблицы
+                остаются без группы или даты, если в исходнике стоял «?». Без
+                группы не считается курс, и такая запись не уйдёт в архив сама.
+              */}
+              <Select.Item value="incomplete">Неполные данные</Select.Item>
             </Select.Content>
           </Select.Root>
-
-          {/*
-            Записи с пробелами надо уметь находить: загруженные из таблицы
-            остаются без группы или даты, если в исходнике стоял «?». Без
-            группы не считается курс, и такая запись не уйдёт в архив сама.
-          */}
-          <Text as="label" size="2" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Checkbox
-              checked={incompleteOnly}
-              onCheckedChange={(checked) => updateFilter('incomplete', checked ? '1' : '')}
-            />
-            Только неполные
-          </Text>
         </Flex>
       </Card>
 

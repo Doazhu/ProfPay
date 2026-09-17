@@ -1,7 +1,7 @@
 """Плательщики, платежи, деректораты, настройки взносов."""
 import io
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from enum import Enum
 from typing import Optional
 
@@ -10,8 +10,9 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from backend.application.schemas import (
-    BudgetSettings, DataEntryContext, FacultyCreate, FacultyResponse, FacultyUpdate,
-    GroupHint,
+    BudgetImpact, BudgetSettings, BudgetSettingsSaved, BudgetSettingsUpdate,
+    DataEntryContext, FacultyCreate, FacultyResponse, FacultyUpdate,
+    GroupHint, WithholdingResult,
     PaginatedPayers, PayerCreate, PayerResponse, PayerUpdate,
     PayerWithDetailsResponse, PaymentCreate, PaymentResponse,
     PaymentSettingsCreate, PaymentSettingsResponse, PaymentSettingsUpdate,
@@ -26,7 +27,7 @@ from backend.domain.models import (
 )
 from backend.infrastructure.repositories import (
     AppSettingsRepository, AuditRepository, FacultyRepository, PayerRepository,
-    PaymentRepository, PaymentSettingsRepository,
+    PaymentRepository, PaymentSettingsRepository, graduated_clause,
 )
 from backend.presentation.dependencies import (
     client_ip, require_any_role, require_operator,
@@ -237,16 +238,96 @@ async def get_budget_settings(
     )
 
 
-@router.put("/budget-settings", response_model=BudgetSettings)
+def _decimal_or_none(text: Optional[str]) -> Optional[Decimal]:
+    """Значение из настроек в число. Пустая строка и мусор — это None."""
+    if text is None or not str(text).strip():
+        return None
+    try:
+        return Decimal(str(text).strip().replace(",", "."))
+    except (InvalidOperation, ValueError):
+        return None
+
+
+@router.get("/budget-settings/impact", response_model=BudgetImpact)
+async def budget_settings_impact(
+    stipend: Optional[str] = None,
+    percent: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: SystemUser = Depends(require_any_role),
+):
+    """
+    Кого затронет применение шаблона — до того, как что-то сохранено.
+
+    Нужно диалогу подтверждения: «перезапишем 156 записей, у 12 из них
+    значения отличаются» гораздо честнее, чем просто «применить ко всем».
+    """
+    new_stipend = _decimal_or_none(stipend)
+    new_percent = _decimal_or_none(percent)
+
+    payers = db.query(Payer.stipend_amount, Payer.budget_percent).filter(
+        Payer.is_budget.is_(True), Payer.is_active.is_(True)
+    ).all()
+
+    differing = 0
+    without_values = 0
+    for current_stipend, current_percent in payers:
+        if current_stipend is None and current_percent is None:
+            without_values += 1
+            continue
+        if current_stipend != new_stipend or current_percent != new_percent:
+            differing += 1
+
+    return BudgetImpact(
+        budget_payers=len(payers),
+        differing=differing,
+        without_values=without_values,
+    )
+
+
+@router.put("/budget-settings", response_model=BudgetSettingsSaved)
 async def update_budget_settings(
-    data: BudgetSettings,
+    data: BudgetSettingsUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: SystemUser = Depends(require_operator),
 ):
+    """
+    Сохранить шаблон для бюджетников и, если попросили, применить его ко всем.
+
+    Без флага это остаётся именно шаблоном: подставляется в форму добавления
+    и ничего не меняет у заведённых. С флагом стипендия и процент переписываются
+    у всех бюджетников — включая тех, кому их правили вручную, поэтому
+    интерфейс перед этим показывает, скольких это затронет.
+    """
     repo = AppSettingsRepository(db)
     repo.set("default_budget_percent", data.default_budget_percent, "Процент от стипендии по умолчанию")
     repo.set("default_stipend_amount", data.default_stipend_amount, "Сумма стипендии по умолчанию")
-    return data
+
+    applied_to = 0
+    if data.apply_to_existing:
+        applied_to = db.query(Payer).filter(
+            Payer.is_budget.is_(True), Payer.is_active.is_(True)
+        ).update(
+            {
+                Payer.stipend_amount: _decimal_or_none(data.default_stipend_amount),
+                Payer.budget_percent: _decimal_or_none(data.default_budget_percent),
+            },
+            synchronize_session=False,
+        )
+        db.commit()
+        AuditRepository(db).record(
+            "budget_template_applied", "payer", None, current_user.id,
+            f"Шаблон бюджетника применён к {applied_to} записям: "
+            f"стипендия {data.default_stipend_amount or '—'}, "
+            f"процент {data.default_budget_percent or '—'}",
+            client_ip(request),
+        )
+
+    return BudgetSettingsSaved(
+        default_budget_percent=data.default_budget_percent,
+        default_stipend_amount=data.default_stipend_amount,
+        applied_to=applied_to,
+    )
 
 
 # ============== Контекст ввода данных ==============
@@ -454,6 +535,101 @@ async def export_payers(
     )
 
 
+# ============== Взносы, удержанные из стипендии ==============
+
+# По этой отметке видно, что платёж завёл не бухгалтер руками, а система —
+# по признаку «бюджетник». Она же не даёт продублировать его при повторном
+# сохранении карточки.
+WITHHELD_FROM_STIPEND = "Удержание из стипендии"
+
+
+def _withholding_amount(db: Session) -> Optional[Decimal]:
+    """Сколько удерживают за учебный год. None — суммы на год не заданы."""
+    settings_row = PaymentSettingsRepository(db).get_current()
+    if settings_row is None:
+        return None
+    total = settings_row.total_year_amount
+    return total if total and total > 0 else None
+
+
+def _record_withholding(db: Session, payer_id: int, user_id: Optional[int]) -> bool:
+    """
+    Записать бюджетнику взнос за текущий учебный год.
+
+    У бюджетников взнос удерживают из стипендии, то есть деньги уже собраны —
+    иначе они висели бы в должниках круглый год. Платёж создаётся настоящей
+    записью, а не просто статусом: иначе сумма не попала бы ни в «Собрано
+    средств», ни в отчёты.
+
+    Возвращает False, если платёж за этот год уже есть или сумма на год
+    не задана — придумывать её нельзя.
+    """
+    amount = _withholding_amount(db)
+    if amount is None:
+        return False
+
+    year = academic_year_label()
+    exists = db.query(Payment.id).filter(
+        Payment.payer_id == payer_id, Payment.academic_year == year
+    ).first()
+    if exists:
+        return False
+
+    payment = Payment(
+        payer_id=payer_id,
+        amount=amount,
+        payment_date=date.today(),
+        academic_year=year,
+        payment_method=WITHHELD_FROM_STIPEND,
+        notes="Взнос удержан из стипендии",
+        created_by=user_id,
+    )
+    PaymentRepository(db).create(payment)
+    recalculate_payer_status(db, payer_id)
+    return True
+
+
+@router.post("/budget-settings/withhold", response_model=WithholdingResult)
+async def withhold_from_stipends(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: SystemUser = Depends(require_operator),
+):
+    """
+    Провести взносы всем бюджетникам за текущий учебный год.
+
+    Нужно для тех, кто уже заведён: новым платёж записывается сам при
+    сохранении карточки, а загруженным из таблицы — вот этой кнопкой.
+    Повторный запуск безопасен: у кого платёж за год уже есть, того пропускаем.
+    """
+    amount = _withholding_amount(db)
+    year = academic_year_label()
+
+    if amount is None:
+        return WithholdingResult(created=0, already_had=0, academic_year=year, amount=None)
+
+    payer_ids = [
+        row[0] for row in db.query(Payer.id).filter(
+            Payer.is_budget.is_(True), Payer.is_active.is_(True), ~graduated_clause()
+        ).all()
+    ]
+
+    created = sum(1 for payer_id in payer_ids
+                  if _record_withholding(db, payer_id, current_user.id))
+
+    AuditRepository(db).record(
+        "withholding", "payment", None, current_user.id,
+        f"Проведены взносы из стипендии за {year}: {created} из {len(payer_ids)} бюджетников",
+        client_ip(request),
+    )
+    return WithholdingResult(
+        created=created,
+        already_had=len(payer_ids) - created,
+        academic_year=year,
+        amount=amount,
+    )
+
+
 @router.get("/payers/{payer_id}", response_model=PayerWithDetailsResponse)
 async def get_payer(
     payer_id: int,
@@ -484,6 +660,13 @@ async def create_payer(
     _apply_updates(payer, data.model_dump())
 
     created = PayerRepository(db).create(payer)
+
+    # У бюджетника взнос удерживают из стипендии — записываем его сразу,
+    # иначе человек попадёт в должники, ничего никому не задолжав.
+    if created.is_budget:
+        _record_withholding(db, created.id, current_user.id)
+        created = PayerRepository(db).get_by_id(created.id)
+
     AuditRepository(db).record(
         "create", "payer", created.id, current_user.id,
         f"Добавлен плательщик {created.full_name}", client_ip(request),
@@ -527,6 +710,12 @@ async def update_payer(
 
     _apply_updates(payer, updates)
     saved = repo.save(payer)
+
+    # Отметили бюджетником — взнос за год считается удержанным. Обратная
+    # отметка платёж не удаляет: деньги за прошедший семестр могли и правда
+    # удержать, а решать это за бухгалтера нельзя — он снимет платёж сам.
+    if saved.is_budget and _record_withholding(db, payer_id, current_user.id):
+        saved = repo.get_by_id(payer_id)
 
     AuditRepository(db).record(
         "update", "payer", payer_id, current_user.id,

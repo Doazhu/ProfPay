@@ -307,6 +307,37 @@ class BudgetSettings(BaseModel):
     default_stipend_amount: str = ""
 
 
+class BudgetSettingsUpdate(BudgetSettings):
+    """
+    Сохранение шаблона для бюджетников.
+
+    apply_to_existing=true переписывает стипендию и процент у всех бюджетников,
+    а не только подставляет их в форму добавления. Решение осознанное, поэтому
+    флаг приходит явно, а интерфейс спрашивает подтверждение.
+    """
+    apply_to_existing: bool = False
+
+
+class BudgetSettingsSaved(BudgetSettings):
+    """Что получилось после сохранения."""
+    applied_to: int = 0          # скольким бюджетникам переписали значения
+
+
+class BudgetImpact(BaseModel):
+    """Кого затронет применение шаблона — считается до сохранения."""
+    budget_payers: int           # всего бюджетников
+    differing: int               # у скольких сейчас другие значения
+    without_values: int          # у скольких поля пустые
+
+
+class WithholdingResult(BaseModel):
+    """Итог проведения взносов, удержанных из стипендии."""
+    created: int                 # скольким записали платёж
+    already_had: int             # у скольких платёж за этот год уже был
+    academic_year: str
+    amount: Optional[Decimal]    # сумма одного платежа; None — суммы на год не заданы
+
+
 # ============== Плательщики ==============
 
 _PAYER_TEXT_FIELDS = ("last_name", "first_name", "middle_name", "notes",

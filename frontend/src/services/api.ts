@@ -255,14 +255,53 @@ export const paymentSettingsApi = {
 
 // ============== Budget Settings API ==============
 
+export interface BudgetImpact {
+  budget_payers: number;    // всего бюджетников
+  differing: number;        // у скольких сейчас другие значения
+  without_values: number;   // у скольких поля пустые
+}
+
+export interface WithholdingResult {
+  created: number;
+  already_had: number;
+  academic_year: string;
+  amount: number | null;    // null — суммы взносов на год не заданы
+}
+
 export const budgetSettingsApi = {
   get: async (): Promise<BudgetSettings> => {
     const { data } = await api.get('/budget-settings');
     return data;
   },
 
-  update: async (settings: Partial<BudgetSettings>): Promise<void> => {
-    await api.put('/budget-settings', settings);
+  /** Кого затронет применение шаблона — спрашивается до сохранения. */
+  impact: async (settings: BudgetSettings): Promise<BudgetImpact> => {
+    const { data } = await api.get('/budget-settings/impact', {
+      params: {
+        stipend: settings.default_stipend_amount,
+        percent: settings.default_budget_percent,
+      },
+    });
+    return data;
+  },
+
+  /**
+   * Сохранить шаблон. applyToExisting переписывает стипендию и процент
+   * у всех бюджетников, а не только подставляет их в форму добавления.
+   */
+  update: async (
+    settings: Partial<BudgetSettings>, applyToExisting = false,
+  ): Promise<{ applied_to: number }> => {
+    const { data } = await api.put('/budget-settings', {
+      ...settings, apply_to_existing: applyToExisting,
+    });
+    return data;
+  },
+
+  /** Провести взносы, удержанные из стипендии, всем бюджетникам за текущий год. */
+  withhold: async (): Promise<WithholdingResult> => {
+    const { data } = await api.post('/budget-settings/withhold');
+    return data;
   },
 };
 

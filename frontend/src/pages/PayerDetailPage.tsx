@@ -29,6 +29,20 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={className}>{label}</span>;
 }
 
+/**
+ * Подпись способа платежа.
+ *
+ * Раньше всё, что не «наличные» и не «карта», подписывалось «Перевод» —
+ * и удержание из стипендии выглядело переводом, которого никто не делал.
+ * Незнакомое значение показываем как есть: оно уже человекочитаемое.
+ */
+function paymentMethodLabel(method: string): string {
+  if (method === 'cash') return 'Наличные';
+  if (method === 'card') return 'Карта';
+  if (method === 'transfer') return 'Перевод';
+  return method;
+}
+
 export default function PayerDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -581,12 +595,13 @@ export default function PayerDetailPage() {
                     </p>
                     {payer.stipend_amount && payer.budget_percent && (
                       <p className="flex items-center gap-2">
-                        <span className="text-accent text-sm">К оплате:</span>
-                        <span className="text-primary font-bold">
+                        <span className="text-accent text-sm">Удержание:</span>
+                        <span className="text-dark font-medium">
                           {new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 2 }).format(
                             Math.round(payer.stipend_amount * payer.budget_percent) / 100
                           )}
                         </span>
+                        <span className="text-accent text-xs">в месяц</span>
                       </p>
                     )}
                   </div>
@@ -767,8 +782,7 @@ export default function PayerDetailPage() {
                   )}
                   {payment.payment_method && (
                     <div className="text-xs bg-white px-2 py-1 rounded text-accent">
-                      {payment.payment_method === 'cash' ? 'Наличные' :
-                       payment.payment_method === 'card' ? 'Карта' : 'Перевод'}
+                      {paymentMethodLabel(payment.payment_method)}
                     </div>
                   )}
                 </div>
