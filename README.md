@@ -12,7 +12,7 @@
 | `backend/application/` | Схемы Pydantic — валидация входа и формат ответов |
 | `backend/infrastructure/` | Репозитории; шифрование полей прозрачно для вызывающего |
 | `backend/presentation/` | Ручки API |
-| `backend/tools/` | Разовые скрипты: миграция шифрования, аварийный сброс доступа |
+| `backend/tools/` | Скрипты: загрузка списка из Excel, миграция шифрования, аварийный сброс доступа |
 | `backend/tests/` | Тесты (`pytest backend/tests`) |
 | `frontend/src/` | React SPA на Radix Themes |
 
