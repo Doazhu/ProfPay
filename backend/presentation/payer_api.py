@@ -80,6 +80,9 @@ def serialize_payer(payer: Payer) -> dict:
         "group_code": payer.group_code,      # код группы с актуальным курсом
         "education_level": payer.education_level or "bachelor",
         "is_archived": payer.is_archived,
+        # Чего не хватает в записи — список считает сервер, чтобы правило
+        # не разъехалось между фильтром и отметкой в строке.
+        "missing_fields": payer.missing_fields,
     })
     return data
 
@@ -298,6 +301,7 @@ async def list_payers(
     status_filter: Optional[PaymentStatus] = Query(None, alias="status"),
     search: Optional[str] = Query(None, max_length=100),
     archive: ArchiveFilter = Query(ArchiveFilter.ACTIVE),
+    incomplete: bool = Query(False, description="только записи с незаполненными полями"),
     db: Session = Depends(get_db),
     current_user: SystemUser = Depends(require_any_role),
 ):
@@ -309,6 +313,7 @@ async def list_payers(
         status=status_filter,
         search=search,
         archived=_ARCHIVE_FLAG[archive],
+        incomplete_only=incomplete,
     )
     return PaginatedPayers(
         items=[serialize_payer(p) for p in payers],

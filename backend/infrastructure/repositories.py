@@ -98,6 +98,24 @@ def decrypt_payment(payment: Payment) -> None:
 # Архив: условие «человек уже выпустился» прямо в SQL
 # ---------------------------------------------------------------------------
 
+def incomplete_clause():
+    """
+    Условие «в записи не хватает данных» — то же, что Payer.missing_fields.
+
+    Держится в SQL, чтобы фильтр считался на странице, а не после выгрузки
+    всей таблицы. Дата рождения зашифрована, но на проверку NULL шифрование
+    не влияет: пустое поле остаётся пустым.
+    """
+    return or_(
+        Payer.group_name.is_(None),
+        Payer.group_name == "",
+        Payer.admission_year.is_(None),
+        Payer.faculty_id.is_(None),
+        Payer.date_of_birth.is_(None),
+        Payer.date_of_birth == "",
+    )
+
+
 def graduated_clause():
     """
     Курс = начало учебного года − год поступления + 1, значит выпуск наступает,
@@ -273,6 +291,7 @@ class PayerRepository:
         active_only: bool = True,
         archived: Optional[bool] = False,
         debtors_only: bool = False,
+        incomplete_only: bool = False,
     ) -> Tuple[List[Payer], int]:
         """
         Страница списка плательщиков и общее количество.
@@ -296,6 +315,8 @@ class PayerRepository:
             query = query.filter(Payer.status == status)
         if debtors_only:
             query = query.filter(Payer.status.in_([PaymentStatus.UNPAID, PaymentStatus.PARTIAL]))
+        if incomplete_only:
+            query = query.filter(incomplete_clause())
         if archived is not None:
             clause = graduated_clause()
             query = query.filter(clause if archived else ~clause)

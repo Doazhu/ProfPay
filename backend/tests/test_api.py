@@ -461,3 +461,65 @@ def test_export_keeps_phone_readable(auth_client, faculty):
     phones = [c.value for row in sheet.iter_rows(min_row=2) for c in row
               if isinstance(c.value, str) and "79001234567" in c.value]
     assert phones == ["'+79001234567"]
+
+
+# ---------------------------------------------------------------------------
+# Фильтр «неполные данные»
+# ---------------------------------------------------------------------------
+
+def test_missing_fields_lists_the_gaps(auth_client, faculty):
+    """Отметка в строке перечисляет ровно то, что не заполнено."""
+    full = make_payer(auth_client, faculty.id, last_name="Полный", email=None)
+    assert auth_client.get(f"{API}/payers/{full['id']}").json()["missing_fields"] == []
+
+    empty = make_payer(auth_client, None, last_name="Пустой", email=None,
+                       group_name=None, admission_year=None, date_of_birth=None)
+    assert set(auth_client.get(f"{API}/payers/{empty['id']}").json()["missing_fields"]) == {
+        "группа", "год поступления", "деректорат", "дата рождения",
+    }
+
+
+def test_incomplete_filter_returns_only_records_with_gaps(auth_client, faculty):
+    make_payer(auth_client, faculty.id, last_name="Полный", email=None)
+    without_group = make_payer(auth_client, faculty.id, last_name="Безгруппы", email=None,
+                               group_name=None, admission_year=None)
+    without_birth = make_payer(auth_client, faculty.id, last_name="Бездаты", email=None,
+                               date_of_birth=None)
+
+    page = auth_client.get(f"{API}/payers", params={"incomplete": "true"}).json()
+    assert page["total"] == 2
+    assert {p["id"] for p in page["items"]} == {without_group["id"], without_birth["id"]}
+
+    # Без флага список прежний — фильтр ничего не прячет сам по себе.
+    assert auth_client.get(f"{API}/payers").json()["total"] == 3
+
+
+def test_incomplete_filter_matches_the_row_marker(auth_client, faculty):
+    """
+    Условие живёт в двух местах: в SQL для фильтра и в свойстве модели для
+    отметки в строке. Разойдутся — фильтр начнёт врать, поэтому сверяем.
+    """
+    make_payer(auth_client, faculty.id, last_name="Полный", email=None)
+    make_payer(auth_client, faculty.id, last_name="Безгруппы", email=None,
+               group_name=None, admission_year=None)
+    make_payer(auth_client, None, last_name="Бездеректората", email=None)
+    make_payer(auth_client, faculty.id, last_name="Бездаты", email=None, date_of_birth=None)
+
+    filtered = auth_client.get(f"{API}/payers", params={"incomplete": "true", "per_page": 100}).json()
+    everyone = auth_client.get(f"{API}/payers", params={"per_page": 100}).json()
+
+    by_filter = {p["id"] for p in filtered["items"]}
+    by_marker = {p["id"] for p in everyone["items"] if p["missing_fields"]}
+    assert by_filter == by_marker
+
+
+def test_incomplete_filter_combines_with_other_filters(auth_client, faculty):
+    make_payer(auth_client, faculty.id, last_name="Иванов", email=None, group_name=None,
+               admission_year=None)
+    make_payer(auth_client, faculty.id, last_name="Петров", email=None, group_name=None,
+               admission_year=None)
+
+    page = auth_client.get(f"{API}/payers",
+                           params={"incomplete": "true", "search": "Иванов"}).json()
+    assert page["total"] == 1
+    assert page["items"][0]["last_name"] == "Иванов"

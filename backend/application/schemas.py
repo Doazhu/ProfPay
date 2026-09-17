@@ -410,6 +410,9 @@ class PayerResponse(BaseModel):
     faculty_id: Optional[int]
     group_name: Optional[str]   # как хранится: "1-мд-35"
     group_code: Optional[str]   # с актуальным курсом: "3-мд-35"
+    # Незаполненные поля: «группа», «год поступления», «деректорат»,
+    # «дата рождения». Пустой список — всё на месте.
+    missing_fields: List[str] = []
     department: Optional[str]
     admission_year: Optional[int]
     education_level: Optional[str]

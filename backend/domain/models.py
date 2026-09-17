@@ -16,7 +16,7 @@
 import enum
 from datetime import datetime, date
 from decimal import Decimal
-from typing import Optional
+from typing import List, Optional
 
 from sqlalchemy import (
     Column, Integer, String, Boolean, DateTime, Date,
@@ -209,6 +209,30 @@ class Payer(Base):
     def is_archived(self) -> bool:
         """Срок обучения вышел — запись уходит в архив."""
         return is_graduated(self.admission_year, self.education_level)
+
+    @property
+    def missing_fields(self) -> List[str]:
+        """
+        Незаполненные поля, из-за которых запись работает не в полную силу.
+
+        Главное здесь — группа и год поступления: без них не считается курс,
+        и запись никогда не уйдёт в архив сама, то есть останется в списках
+        и через пять лет после выпуска.
+
+        Условие продублировано в SQL (repositories.incomplete_clause) — иначе
+        фильтр по списку и отметка в строке разошлись бы. Расхождение ловит
+        тест test_api.test_incomplete_filter_matches_the_row_marker.
+        """
+        gaps: List[str] = []
+        if not self.group_name:
+            gaps.append("группа")
+        if self.admission_year is None:
+            gaps.append("год поступления")
+        if self.faculty_id is None:
+            gaps.append("деректорат")
+        if not self.date_of_birth:
+            gaps.append("дата рождения")
+        return gaps
 
     @property
     def group_code(self) -> Optional[str]:

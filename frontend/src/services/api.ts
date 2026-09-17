@@ -292,6 +292,8 @@ export interface PayerFilters {
   search?: string;
   /** active — без архива (по умолчанию), archived — только архив, all — все */
   archive?: 'active' | 'archived' | 'all';
+  /** Только записи, где не хватает группы, года поступления, деректората или даты рождения. */
+  incomplete?: boolean;
 }
 
 export const payerApi = {

@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { DownloadIcon, MagnifyingGlassIcon, PlusIcon } from '@radix-ui/react-icons';
 import {
-  Button, Card, Flex, Heading, Select, Spinner, Text, TextField,
+  DownloadIcon, ExclamationTriangleIcon, MagnifyingGlassIcon, PlusIcon,
+} from '@radix-ui/react-icons';
+import {
+  Badge, Button, Card, Checkbox, Flex, Heading, Select, Spinner, Text, TextField,
+  Tooltip,
 } from '@radix-ui/themes';
 import type { Payer, Faculty, PaymentStatus } from '../types';
 import { payerApi, facultyApi, exportApi } from '../services/api';
@@ -44,6 +47,7 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
   const status = searchParams.get('status') as PaymentStatus | undefined;
   const search = searchParams.get('search') || '';
   const archiveMode = (searchParams.get('archive') || defaultArchive) as 'active' | 'archived' | 'all';
+  const incompleteOnly = searchParams.get('incomplete') === '1';
 
   useEffect(() => {
     loadFilters();
@@ -51,7 +55,7 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
 
   useEffect(() => {
     loadPayers();
-  }, [page, facultyId, status, search, archiveMode]);
+  }, [page, facultyId, status, search, archiveMode, incompleteOnly]);
 
   const loadFilters = async () => {
     try {
@@ -72,6 +76,7 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
         status,
         search: search || undefined,
         archive: archiveMode,
+        incomplete: incompleteOnly || undefined,
       });
       setPayers(response.items);
       setTotal(response.total);
@@ -196,6 +201,19 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
               <Select.Item value="all">Все, включая архив</Select.Item>
             </Select.Content>
           </Select.Root>
+
+          {/*
+            Записи с пробелами надо уметь находить: загруженные из таблицы
+            остаются без группы или даты, если в исходнике стоял «?». Без
+            группы не считается курс, и такая запись не уйдёт в архив сама.
+          */}
+          <Text as="label" size="2" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Checkbox
+              checked={incompleteOnly}
+              onCheckedChange={(checked) => updateFilter('incomplete', checked ? '1' : '')}
+            />
+            Только неполные
+          </Text>
         </Flex>
       </Card>
 
@@ -253,6 +271,13 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
                           {payer.is_budget && (
                             <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium" title="Бюджетник">Б</span>
                           )}
+                          {payer.missing_fields.length > 0 && (
+                            <Tooltip content={`Не заполнено: ${payer.missing_fields.join(', ')}`}>
+                              <Badge color="amber" variant="soft" size="1">
+                                <ExclamationTriangleIcon /> неполные
+                              </Badge>
+                            </Tooltip>
+                          )}
                         </div>
                         {payer.email && (
                           <p className="text-xs text-accent">{payer.email}</p>
@@ -300,6 +325,11 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
                           <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">Б</span>
                         )}
                       </p>
+                      {payer.missing_fields.length > 0 && (
+                        <Text as="p" size="1" color="amber">
+                          не заполнено: {payer.missing_fields.join(', ')}
+                        </Text>
+                      )}
                       {payer.email && <p className="text-xs text-accent truncate">{payer.email}</p>}
                     </div>
                     <StatusBadge status={payer.status} />

@@ -84,6 +84,8 @@ export interface Payer {
   education_level: EducationLevel;
   course: number | null;       // вычисляется на бэкенде из года поступления
   is_archived: boolean;        // срок обучения вышел
+  /** Незаполненные поля: «группа», «год поступления», «деректорат», «дата рождения». */
+  missing_fields: string[];
   department: string | null;   // Кафедра abbreviation e.g. "ЦИАТ", optional
   status: PaymentStatus;
   membership_start: string | null;
