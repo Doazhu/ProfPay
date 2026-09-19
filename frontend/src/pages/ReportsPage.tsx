@@ -161,13 +161,13 @@ export default function ReportsPage() {
             <tbody>
               {facultyStats.map((faculty) => {
                 const percentage = faculty.total_payers > 0
-                  ? (faculty.paid_count / faculty.total_payers) * 100
+                  ? (faculty.paying_count > 0 ? (faculty.paying_count - faculty.debtors_count) / faculty.paying_count : 0) * 100
                   : 0;
                 return (
                   <tr key={faculty.faculty_id} className="border-b border-light-dark last:border-0 table-row-interactive">
                     <td className="py-3 px-4 text-dark font-medium">{faculty.faculty_name}</td>
                     <td className="py-3 px-4 text-right text-dark">{faculty.total_payers}</td>
-                    <td className="py-3 px-4 text-right text-green-600">{faculty.paid_count}</td>
+                    <td className="py-3 px-4 text-right text-green-600">{faculty.budget_count}</td>
                     <td className="py-3 px-4 text-right text-red-600">{faculty.debtors_count}</td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -196,7 +196,7 @@ export default function ReportsPage() {
         <div className="md:hidden space-y-3">
           {facultyStats.map((faculty) => {
             const percentage = faculty.total_payers > 0
-              ? (faculty.paid_count / faculty.total_payers) * 100
+              ? (faculty.paying_count > 0 ? (faculty.paying_count - faculty.debtors_count) / faculty.paying_count : 0) * 100
               : 0;
             return (
               <div key={faculty.faculty_id} className="p-3 bg-light-dark rounded-lg">
@@ -215,7 +215,7 @@ export default function ReportsPage() {
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-accent">Всего: {faculty.total_payers}</span>
-                  <span className="text-green-600">Оплат: {faculty.paid_count}</span>
+                  <span className="text-green-600">Бюджет: {faculty.budget_count}</span>
                   <span className="text-red-600">Долг: {faculty.debtors_count}</span>
                   <span className="text-accent">{percentage.toFixed(0)}%</span>
                 </div>

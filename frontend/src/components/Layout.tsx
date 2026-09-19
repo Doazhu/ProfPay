@@ -48,7 +48,9 @@ export default function Layout() {
           </Flex>
         </Flex>
 
-        <main style={{ flex: 1, overflow: 'auto' }}>
+        {/* id нужен ScrollTrigger: прокручивается этот элемент, а не окно,
+            и без явного указания анимации появления не срабатывали бы. */}
+        <main id="app-scroll" style={{ flex: 1, overflow: 'auto' }}>
           <div className="p-4 md:p-6" style={{ maxWidth: 1400 }}>
             <Outlet />
           </div>

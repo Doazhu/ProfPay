@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from backend.application.schemas import (
     BudgetImpact, BudgetSettings, BudgetSettingsSaved, BudgetSettingsUpdate,
     DataEntryContext, FacultyCreate, FacultyResponse, FacultyUpdate,
-    GroupHint, WithholdingResult,
+    GroupHint,
     PaginatedPayers, PayerCreate, PayerResponse, PayerUpdate,
     PayerWithDetailsResponse, PaymentCreate, PaymentResponse,
     PaymentSettingsCreate, PaymentSettingsResponse, PaymentSettingsUpdate,
@@ -27,7 +27,7 @@ from backend.domain.models import (
 )
 from backend.infrastructure.repositories import (
     AppSettingsRepository, AuditRepository, FacultyRepository, PayerRepository,
-    PaymentRepository, PaymentSettingsRepository, graduated_clause,
+    PaymentRepository, PaymentSettingsRepository,
 )
 from backend.presentation.dependencies import (
     client_ip, require_any_role, require_operator,
@@ -62,7 +62,7 @@ _PLAIN_FIELDS = (
     "is_budget", "stipend_amount", "budget_percent",
     "faculty_id", "group_name", "department", "admission_year",
     "status", "membership_start", "membership_end", "is_active", "notes",
-    "created_at", "updated_at", "decryption_failed",
+    "archived_at", "created_at", "updated_at", "decryption_failed",
 )
 
 
@@ -81,6 +81,7 @@ def serialize_payer(payer: Payer) -> dict:
         "group_code": payer.group_code,      # код группы с актуальным курсом
         "education_level": payer.education_level or "bachelor",
         "is_archived": payer.is_archived,
+        "is_final_year": payer.is_final_year,
         # Чего не хватает в записи — список считает сервер, чтобы правило
         # не разъехалось между фильтром и отметкой в строке.
         "missing_fields": payer.missing_fields,
@@ -383,6 +384,7 @@ async def list_payers(
     search: Optional[str] = Query(None, max_length=100),
     archive: ArchiveFilter = Query(ArchiveFilter.ACTIVE),
     incomplete: bool = Query(False, description="только записи с незаполненными полями"),
+    paying_only: bool = Query(False, description="скрыть бюджетников"),
     db: Session = Depends(get_db),
     current_user: SystemUser = Depends(require_any_role),
 ):
@@ -395,6 +397,7 @@ async def list_payers(
         search=search,
         archived=_ARCHIVE_FLAG[archive],
         incomplete_only=incomplete,
+        paying_only=paying_only,
     )
     return PaginatedPayers(
         items=[serialize_payer(p) for p in payers],
@@ -535,99 +538,23 @@ async def export_payers(
     )
 
 
-# ============== Взносы, удержанные из стипендии ==============
-
-# По этой отметке видно, что платёж завёл не бухгалтер руками, а система —
-# по признаку «бюджетник». Она же не даёт продублировать его при повторном
-# сохранении карточки.
-WITHHELD_FROM_STIPEND = "Удержание из стипендии"
-
-
-def _withholding_amount(db: Session) -> Optional[Decimal]:
-    """Сколько удерживают за учебный год. None — суммы на год не заданы."""
-    settings_row = PaymentSettingsRepository(db).get_current()
-    if settings_row is None:
-        return None
-    total = settings_row.total_year_amount
-    return total if total and total > 0 else None
-
-
-def _record_withholding(db: Session, payer_id: int, user_id: Optional[int]) -> bool:
-    """
-    Записать бюджетнику взнос за текущий учебный год.
-
-    У бюджетников взнос удерживают из стипендии, то есть деньги уже собраны —
-    иначе они висели бы в должниках круглый год. Платёж создаётся настоящей
-    записью, а не просто статусом: иначе сумма не попала бы ни в «Собрано
-    средств», ни в отчёты.
-
-    Возвращает False, если платёж за этот год уже есть или сумма на год
-    не задана — придумывать её нельзя.
-    """
-    amount = _withholding_amount(db)
-    if amount is None:
-        return False
-
-    year = academic_year_label()
-    exists = db.query(Payment.id).filter(
-        Payment.payer_id == payer_id, Payment.academic_year == year
-    ).first()
-    if exists:
-        return False
-
-    payment = Payment(
-        payer_id=payer_id,
-        amount=amount,
-        payment_date=date.today(),
-        academic_year=year,
-        payment_method=WITHHELD_FROM_STIPEND,
-        notes="Взнос удержан из стипендии",
-        created_by=user_id,
-    )
-    PaymentRepository(db).create(payment)
-    recalculate_payer_status(db, payer_id)
-    return True
-
-
-@router.post("/budget-settings/withhold", response_model=WithholdingResult)
-async def withhold_from_stipends(
-    request: Request,
+@router.get("/payers/finishing", response_model=list[PayerResponse])
+async def finishing_payers(
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
-    current_user: SystemUser = Depends(require_operator),
+    current_user: SystemUser = Depends(require_any_role),
 ):
     """
-    Провести взносы всем бюджетникам за текущий учебный год.
+    Кто на последнем курсе — этим летом выпуск.
 
-    Нужно для тех, кто уже заведён: новым платёж записывается сам при
-    сохранении карточки, а загруженным из таблицы — вот этой кнопкой.
-    Повторный запуск безопасен: у кого платёж за год уже есть, того пропускаем.
+    Нужно на главной: 1 сентября такие записи уходят в архив сами, и если
+    человек на самом деле поступил в магистратуру, он пропадёт из списков
+    молча. Лучше спросить заранее.
     """
-    amount = _withholding_amount(db)
-    year = academic_year_label()
-
-    if amount is None:
-        return WithholdingResult(created=0, already_had=0, academic_year=year, amount=None)
-
-    payer_ids = [
-        row[0] for row in db.query(Payer.id).filter(
-            Payer.is_budget.is_(True), Payer.is_active.is_(True), ~graduated_clause()
-        ).all()
-    ]
-
-    created = sum(1 for payer_id in payer_ids
-                  if _record_withholding(db, payer_id, current_user.id))
-
-    AuditRepository(db).record(
-        "withholding", "payment", None, current_user.id,
-        f"Проведены взносы из стипендии за {year}: {created} из {len(payer_ids)} бюджетников",
-        client_ip(request),
+    payers, _ = PayerRepository(db).list(
+        skip=0, limit=limit, archived=False, final_year_only=True,
     )
-    return WithholdingResult(
-        created=created,
-        already_had=len(payer_ids) - created,
-        academic_year=year,
-        amount=amount,
-    )
+    return [serialize_payer(p) for p in payers]
 
 
 @router.get("/payers/{payer_id}", response_model=PayerWithDetailsResponse)
@@ -661,10 +588,9 @@ async def create_payer(
 
     created = PayerRepository(db).create(payer)
 
-    # У бюджетника взнос удерживают из стипендии — записываем его сразу,
-    # иначе человек попадёт в должники, ничего никому не задолжав.
+    # Бюджетник сразу числится оплаченным: взнос удерживают из стипендии.
     if created.is_budget:
-        _record_withholding(db, created.id, current_user.id)
+        recalculate_payer_status(db, created.id)
         created = PayerRepository(db).get_by_id(created.id)
 
     AuditRepository(db).record(
@@ -711,10 +637,10 @@ async def update_payer(
     _apply_updates(payer, updates)
     saved = repo.save(payer)
 
-    # Отметили бюджетником — взнос за год считается удержанным. Обратная
-    # отметка платёж не удаляет: деньги за прошедший семестр могли и правда
-    # удержать, а решать это за бухгалтера нельзя — он снимет платёж сам.
-    if saved.is_budget and _record_withholding(db, payer_id, current_user.id):
+    # Отметка бюджета меняет смысл статуса: бюджетник числится оплаченным,
+    # платник — по своим платежам. Пересчитываем в обе стороны.
+    if "is_budget" in updates:
+        recalculate_payer_status(db, payer_id)
         saved = repo.get_by_id(payer_id)
 
     AuditRepository(db).record(
@@ -762,6 +688,15 @@ def recalculate_payer_status(db: Session, payer_id: int) -> None:
     """
     payer = db.query(Payer).filter(Payer.id == payer_id).first()
     if payer is None or payer.status == PaymentStatus.EXEMPT:
+        return
+
+    # У бюджетника взнос удерживают из стипендии, профком с него денег
+    # не собирает. Поэтому он числится оплаченным всё время, пока состоит
+    # в профкоме, и никаких платежей для этого заводить не надо.
+    if payer.is_budget:
+        if payer.status != PaymentStatus.PAID:
+            payer.status = PaymentStatus.PAID
+            db.commit()
         return
 
     total = PayerRepository(db).total_paid(payer_id)

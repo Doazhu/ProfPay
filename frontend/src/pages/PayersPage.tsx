@@ -4,7 +4,8 @@ import {
   DownloadIcon, ExclamationTriangleIcon, MagnifyingGlassIcon, PlusIcon,
 } from '@radix-ui/react-icons';
 import {
-  Badge, Button, Card, Flex, Heading, Select, Spinner, Text, TextField, Tooltip,
+  Badge, Button, Card, Checkbox, Flex, Heading, Select, Spinner, Text, TextField,
+  Tooltip,
 } from '@radix-ui/themes';
 import type { Payer, Faculty, PaymentStatus } from '../types';
 import { payerApi, facultyApi, exportApi } from '../services/api';
@@ -47,6 +48,9 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
   const search = searchParams.get('search') || '';
   const archiveMode = (searchParams.get('archive') || defaultArchive) as 'active' | 'archived' | 'all';
   const incompleteOnly = searchParams.get('incomplete') === '1';
+  // Бюджетников часто нужно убрать с глаз: взносы собираются не с них,
+  // и в работе со списком должников они только мешают.
+  const hideBudget = searchParams.get('paying') === '1';
 
   /*
     Одна выпадашка на «что показываем»: архив и неполные данные — это срезы
@@ -75,7 +79,7 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
 
   useEffect(() => {
     loadPayers();
-  }, [page, facultyId, status, search, archiveMode, incompleteOnly]);
+  }, [page, facultyId, status, search, archiveMode, incompleteOnly, hideBudget]);
 
   const loadFilters = async () => {
     try {
@@ -97,6 +101,7 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
         search: search || undefined,
         archive: archiveMode,
         incomplete: incompleteOnly || undefined,
+        paying_only: hideBudget || undefined,
       });
       setPayers(response.items);
       setTotal(response.total);
@@ -227,6 +232,14 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
               <Select.Item value="incomplete">Неполные данные</Select.Item>
             </Select.Content>
           </Select.Root>
+
+          <Text as="label" size="2" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Checkbox
+              checked={!hideBudget}
+              onCheckedChange={(checked) => updateFilter('paying', checked ? '' : '1')}
+            />
+            Показывать бюджетников
+          </Text>
         </Flex>
       </Card>
 
@@ -253,7 +266,7 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
                     <th className="text-left py-3 px-4 text-xs font-semibold text-accent-light uppercase tracking-wider">Курс</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-accent-light uppercase tracking-wider">Д. рождения</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-accent-light uppercase tracking-wider">Статус</th>
-                    <th className="text-right py-3 px-4 text-xs font-semibold text-accent-light uppercase tracking-wider">Оплачено</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-accent-light uppercase tracking-wider">Внесено</th>
                     <th className="text-right py-3 px-4 text-xs font-semibold text-accent-light uppercase tracking-wider"></th>
                   </tr>
                 </thead>

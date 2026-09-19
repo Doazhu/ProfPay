@@ -116,15 +116,49 @@ def incomplete_clause():
     )
 
 
+def paying_clause():
+    """
+    «Платник» — тот, с кого профком действительно собирает взносы.
+
+    У бюджетника взнос удерживают из стипендии помимо профкома, поэтому денег
+    с него не собирают и должником он быть не может. Условие живёт в SQL,
+    чтобы должники и статистика считались одним запросом.
+    """
+    return or_(Payer.is_budget.is_(False), Payer.is_budget.is_(None))
+
+
+def final_year_clause():
+    """
+    Последний курс обучения — то же, что Payer.is_final_year, но в SQL.
+
+    Этим летом такие выпускаются, если не продолжат учёбу. Именно их надо
+    показать на главной, пока сентябрь не унёс их в архив молча.
+    """
+    base_year = academic_year_start()
+    conditions = []
+    for level, duration in DURATION_YEARS.items():
+        level_match = Payer.education_level == level.value
+        if level == DEFAULT_EDUCATION_LEVEL:
+            level_match = or_(level_match, Payer.education_level.is_(None))
+        conditions.append(and_(
+            level_match,
+            Payer.admission_year == base_year + 1 - duration,
+        ))
+    return and_(Payer.archived_at.is_(None), or_(*conditions))
+
+
 def graduated_clause():
     """
     Курс = начало учебного года − год поступления + 1, значит выпуск наступает,
     когда admission_year < начало_года + 1 − срок_обучения. Считаем в SQL,
     чтобы архив не приходилось отфильтровывать после выборки всей таблицы.
     Уровень не проставлен — считаем бакалавриатом.
+
+    Отдельно учитывается archived_at: отчислиться или выйти из профкома можно
+    раньше, чем кончится срок обучения.
     """
     base_year = academic_year_start()
-    conditions = []
+    conditions = [Payer.archived_at.isnot(None)]
     for level, duration in DURATION_YEARS.items():
         level_match = Payer.education_level == level.value
         if level == DEFAULT_EDUCATION_LEVEL:
@@ -292,6 +326,8 @@ class PayerRepository:
         archived: Optional[bool] = False,
         debtors_only: bool = False,
         incomplete_only: bool = False,
+        paying_only: bool = False,
+        final_year_only: bool = False,
     ) -> Tuple[List[Payer], int]:
         """
         Страница списка плательщиков и общее количество.
@@ -314,9 +350,18 @@ class PayerRepository:
         if status:
             query = query.filter(Payer.status == status)
         if debtors_only:
-            query = query.filter(Payer.status.in_([PaymentStatus.UNPAID, PaymentStatus.PARTIAL]))
+            # Бюджетник должником не бывает: с него взнос удерживают
+            # из стипендии, а профком денег не собирает.
+            query = query.filter(
+                paying_clause(),
+                Payer.status.in_([PaymentStatus.UNPAID, PaymentStatus.PARTIAL]),
+            )
         if incomplete_only:
             query = query.filter(incomplete_clause())
+        if paying_only:
+            query = query.filter(paying_clause())
+        if final_year_only:
+            query = query.filter(final_year_clause())
         if archived is not None:
             clause = graduated_clause()
             query = query.filter(clause if archived else ~clause)
@@ -594,26 +639,52 @@ class StatsRepository:
         self.db = db
 
     def dashboard(self) -> dict:
+        """
+        Сводка для главной.
+
+        Наверху — участники профкома целиком, под ними разбивка на бюджет
+        и платников. Деньги и долги считаются только по платникам: у бюджетника
+        взнос удерживают из стипендии, профком с него ничего не собирает,
+        и записывать его в должники значит врать самим себе.
+        """
         active = Payer.is_active.is_(True)
         not_archived = ~graduated_clause()
+        members = (active, not_archived)
 
         counts = dict(
             self.db.query(Payer.status, func.count(Payer.id))
-            .filter(active, not_archived)
+            .filter(*members, paying_clause())
             .group_by(Payer.status)
             .all()
         )
 
-        total_payers = sum(counts.values())
-        total_paid = self.db.query(func.coalesce(func.sum(Payment.amount), 0)).scalar() or 0
+        total_members = self.db.query(func.count(Payer.id)).filter(*members).scalar() or 0
+        paying_count = sum(counts.values())
+        budget_count = total_members - paying_count
+
+        # Деньги — только настоящие платежи, и только тех, кто ещё учится.
+        total_paid = (
+            self.db.query(func.coalesce(func.sum(Payment.amount), 0))
+            .join(Payer, Payment.payer_id == Payer.id)
+            .filter(*members)
+            .scalar() or 0
+        )
+
         archived = self.db.query(func.count(Payer.id)).filter(
             active, graduated_clause()
         ).scalar() or 0
 
+        finishing = self.db.query(func.count(Payer.id)).filter(
+            *members, final_year_clause()
+        ).scalar() or 0
+
         return {
-            "total_payers": total_payers,
-            "active_payers": total_payers,
+            "total_payers": total_members,
+            "active_payers": total_members,
             "archived_payers": archived,
+            "budget_count": budget_count,
+            "paying_count": paying_count,
+            "finishing_count": finishing,
             "total_debtors": counts.get(PaymentStatus.UNPAID, 0) + counts.get(PaymentStatus.PARTIAL, 0),
             "total_paid_amount": Decimal(total_paid),
             "paid_count": counts.get(PaymentStatus.PAID, 0),
@@ -635,14 +706,15 @@ class StatsRepository:
                 Faculty.name,
                 Faculty.short_name,
                 func.count(Payer.id).label("total"),
-                func.coalesce(func.sum(case((Payer.status == PaymentStatus.PAID, 1), else_=0)), 0).label("paid"),
-                # Должник — и тот, кто не платил вовсе, и тот, кто внёс часть.
-                # Так же считает сводка наверху панели и раздел «Должники»;
-                # раньше здесь были только UNPAID, и на одном экране под одной
-                # подписью стояли разные числа.
-                func.coalesce(func.sum(case((
-                    Payer.status.in_([PaymentStatus.UNPAID, PaymentStatus.PARTIAL]), 1
-                ), else_=0)), 0).label("debtors"),
+                # Разбивка та же, что в сводке наверху: бюджетники платят
+                # через стипендию, платники — сами.
+                func.coalesce(func.sum(case((Payer.is_budget.is_(True), 1), else_=0)), 0).label("budget"),
+                # Должник — платник, который не внёс взнос или внёс часть.
+                # Бюджетник должником быть не может, поэтому в счёт не идёт.
+                func.coalesce(func.sum(case((and_(
+                    or_(Payer.is_budget.is_(False), Payer.is_budget.is_(None)),
+                    Payer.status.in_([PaymentStatus.UNPAID, PaymentStatus.PARTIAL]),
+                ), 1), else_=0)), 0).label("debtors"),
             )
             .outerjoin(Payer, payer_join)
             .filter(Faculty.is_active.is_(True))
@@ -664,7 +736,8 @@ class StatsRepository:
                 "faculty_id": row.id,
                 "faculty_name": row.short_name or row.name,
                 "total_payers": row.total or 0,
-                "paid_count": row.paid or 0,
+                "budget_count": row.budget or 0,
+                "paying_count": (row.total or 0) - (row.budget or 0),
                 "debtors_count": row.debtors or 0,
                 "total_amount": Decimal(amounts.get(row.id, 0)),
             }

@@ -106,6 +106,7 @@ def _ensure_columns(db: Session) -> None:
         "payers": {
             "admission_year": "INTEGER",
             "education_level": "VARCHAR(20)",
+            "archived_at": "DATE",
         },
     }
 

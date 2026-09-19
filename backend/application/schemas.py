@@ -330,14 +330,6 @@ class BudgetImpact(BaseModel):
     without_values: int          # у скольких поля пустые
 
 
-class WithholdingResult(BaseModel):
-    """Итог проведения взносов, удержанных из стипендии."""
-    created: int                 # скольким записали платёж
-    already_had: int             # у скольких платёж за этот год уже был
-    academic_year: str
-    amount: Optional[Decimal]    # сумма одного платежа; None — суммы на год не заданы
-
-
 # ============== Плательщики ==============
 
 _PAYER_TEXT_FIELDS = ("last_name", "first_name", "middle_name", "notes",
@@ -401,6 +393,8 @@ class PayerUpdate(BaseModel):
     department: Optional[str] = Field(None, max_length=100)
     admission_year: Optional[int] = Field(None, ge=1990, le=2100)
     education_level: Optional[EducationLevel] = None
+    # Убрать в архив (отчислился, доучился) или вернуть оттуда — null.
+    archived_at: Optional[date] = None
 
     status: Optional[PaymentStatus] = None
     membership_start: Optional[date] = None
@@ -444,6 +438,10 @@ class PayerResponse(BaseModel):
     # Незаполненные поля: «группа», «год поступления», «деректорат»,
     # «дата рождения». Пустой список — всё на месте.
     missing_fields: List[str] = []
+    # Дата ухода: отчислился, доучился или вышел из профкома.
+    archived_at: Optional[date] = None
+    # Последний курс — этим летом выпуск, если не продолжит учёбу.
+    is_final_year: bool = False
     department: Optional[str]
     admission_year: Optional[int]
     education_level: Optional[str]
@@ -524,9 +522,15 @@ class PaymentResponse(BaseModel):
 # ============== Статистика ==============
 
 class DashboardStats(BaseModel):
-    total_payers: int
+    total_payers: int            # участники профкома
     active_payers: int
     archived_payers: int
+    # Разбивка участников: бюджет платит через стипендию, платники — сами.
+    budget_count: int = 0
+    paying_count: int = 0
+    # Сколько человек на последнем курсе — им этим летом выпускаться.
+    finishing_count: int = 0
+    # Долги и деньги считаются только по платникам.
     total_debtors: int
     total_paid_amount: Decimal
     paid_count: int
@@ -538,8 +542,9 @@ class DashboardStats(BaseModel):
 class FacultyStats(BaseModel):
     faculty_id: int
     faculty_name: str
-    total_payers: int
-    paid_count: int
+    total_payers: int            # участники профкома в этом деректорате
+    budget_count: int = 0
+    paying_count: int = 0
     # Не заплатившие вовсе плюс заплатившие частично — как в сводке наверху
     # панели и в разделе «Должники».
     debtors_count: int

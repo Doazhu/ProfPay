@@ -529,81 +529,72 @@ def test_incomplete_filter_combines_with_other_filters(auth_client, faculty):
 
 
 # ---------------------------------------------------------------------------
-# Бюджетники: взнос удерживается из стипендии
+# Бюджетники: профком с них денег не собирает
 # ---------------------------------------------------------------------------
 
-def test_budget_payer_gets_the_withheld_payment(auth_client, faculty, year_settings):
+def test_budget_payer_is_paid_without_any_payment(auth_client, faculty, year_settings):
     """
-    У бюджетника взнос удерживают из стипендии — деньги уже собраны, и в
-    должниках ему делать нечего.
+    Взнос бюджетника удерживают из стипендии помимо профкома. Денег профком
+    не получает, поэтому платежа быть не должно — но и должником человек не
+    числится, пока состоит в профкоме.
     """
     created = make_payer(auth_client, faculty.id, email=None, is_budget=True)
+
     assert created["status"] == "paid"
-
-    payments = auth_client.get(f"{API}/payers/{created['id']}/payments").json()
-    assert len(payments) == 1
-    assert str(payments[0]["amount"]) == "240.00"          # 120 осень + 120 весна
-    assert payments[0]["payment_method"] == "Удержание из стипендии"
-
-    # Сумма попадает в общий сбор, а не только в статус.
-    assert auth_client.get(f"{API}/stats/dashboard").json()["total_paid_amount"] == "240.00"
+    assert auth_client.get(f"{API}/payers/{created['id']}/payments").json() == []
+    # В «Собрано средств» денег не прибавилось: их никто не вносил.
+    assert auth_client.get(f"{API}/stats/dashboard").json()["total_paid_amount"] == "0"
 
 
-def test_non_budget_payer_gets_nothing(auth_client, faculty, year_settings):
+def test_budget_payer_is_never_a_debtor(auth_client, faculty, year_settings):
+    make_payer(auth_client, faculty.id, email=None, last_name="Бюджетный", is_budget=True)
+    make_payer(auth_client, faculty.id, email=None, last_name="Платник", is_budget=False)
+
+    debtors = auth_client.get(f"{API}/debtors").json()
+    assert debtors["total"] == 1
+    assert debtors["items"][0]["last_name"] == "Платник"
+
+
+def test_marking_budget_clears_the_debt(auth_client, faculty, year_settings):
     created = make_payer(auth_client, faculty.id, email=None, is_budget=False)
     assert created["status"] == "unpaid"
-    assert auth_client.get(f"{API}/payers/{created['id']}/payments").json() == []
 
-
-def test_marking_budget_later_records_the_payment(auth_client, faculty, year_settings):
-    created = make_payer(auth_client, faculty.id, email=None, is_budget=False)
     updated = auth_client.put(f"{API}/payers/{created['id']}", json={"is_budget": True}).json()
-
     assert updated["status"] == "paid"
-    assert len(auth_client.get(f"{API}/payers/{created['id']}/payments").json()) == 1
-
-
-def test_withholding_is_not_duplicated(auth_client, faculty, year_settings):
-    """Повторное сохранение карточки не должно добавлять второй платёж."""
-    created = make_payer(auth_client, faculty.id, email=None, is_budget=True)
-    for _ in range(3):
-        auth_client.put(f"{API}/payers/{created['id']}", json={"is_budget": True})
-
-    assert len(auth_client.get(f"{API}/payers/{created['id']}/payments").json()) == 1
-
-
-def test_no_withholding_without_year_amounts(auth_client, faculty):
-    """
-    Суммы на год не заданы — придумывать их нельзя, поэтому платёж
-    не создаётся, а человек остаётся неоплаченным.
-    """
-    created = make_payer(auth_client, faculty.id, email=None, is_budget=True)
     assert auth_client.get(f"{API}/payers/{created['id']}/payments").json() == []
-    assert created["status"] == "unpaid"
 
 
-def test_bulk_withholding_covers_existing_payers(auth_client, faculty, year_settings):
-    """Заведённым раньше платёж проводится кнопкой, а не переоткрытием карточки."""
-    from backend.core.database import SessionLocal
-    from backend.domain.models import Payer
+def test_unmarking_budget_returns_the_debt(auth_client, faculty, year_settings):
+    """Платил не он, а стипендия: перестал быть бюджетником — снова должник."""
+    created = make_payer(auth_client, faculty.id, email=None, is_budget=True)
+    updated = auth_client.put(f"{API}/payers/{created['id']}", json={"is_budget": False}).json()
 
-    # Заводим бюджетников в обход API — как это сделал импорт из таблицы.
-    session = SessionLocal()
-    for surname in ("Первый", "Второй"):
-        session.add(Payer(last_name=surname, first_name="Бюджетный",
-                          is_budget=True, is_active=True,
-                          admission_year=academic_year_start(), education_level="bachelor"))
-    session.commit()
-    session.close()
+    assert updated["status"] == "unpaid"
+    assert auth_client.get(f"{API}/debtors").json()["total"] == 1
 
-    result = auth_client.post(f"{API}/budget-settings/withhold").json()
-    assert result["created"] == 2
-    assert str(result["amount"]) == "240.00"
 
-    # Второй запуск ничего не добавляет.
-    again = auth_client.post(f"{API}/budget-settings/withhold").json()
-    assert again["created"] == 0
-    assert again["already_had"] == 2
+def test_budget_payers_can_be_hidden_from_the_list(auth_client, faculty, year_settings):
+    make_payer(auth_client, faculty.id, email=None, last_name="Бюджетный", is_budget=True)
+    make_payer(auth_client, faculty.id, email=None, last_name="Платник", is_budget=False)
+
+    assert auth_client.get(f"{API}/payers").json()["total"] == 2
+
+    only_paying = auth_client.get(f"{API}/payers", params={"paying_only": "true"}).json()
+    assert only_paying["total"] == 1
+    assert only_paying["items"][0]["last_name"] == "Платник"
+
+
+def test_dashboard_splits_members_into_budget_and_paying(auth_client, faculty, year_settings):
+    for index in range(3):
+        make_payer(auth_client, faculty.id, email=None, last_name=f"Бюджетный{index}",
+                   is_budget=True)
+    make_payer(auth_client, faculty.id, email=None, last_name="Платник", is_budget=False)
+
+    stats = auth_client.get(f"{API}/stats/dashboard").json()
+    assert stats["total_payers"] == 4        # участники целиком
+    assert stats["budget_count"] == 3
+    assert stats["paying_count"] == 1
+    assert stats["total_debtors"] == 1       # долг только у платника
 
 
 # ---------------------------------------------------------------------------
@@ -660,3 +651,128 @@ def test_impact_counts_who_will_be_overwritten(auth_client, faculty, year_settin
     assert impact["budget_payers"] == 3
     assert impact["differing"] == 1
     assert impact["without_values"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Последний курс и уход в архив
+# ---------------------------------------------------------------------------
+
+def test_final_year_is_the_last_course_of_the_level(auth_client, faculty, year_settings):
+    """
+    Бакалавр на четвёртом и магистр на втором выпускаются этим летом,
+    первокурсник — нет.
+    """
+    base = academic_year_start()
+    first = make_payer(auth_client, faculty.id, email=None, last_name="Первокурсник",
+                       admission_year=base, education_level="bachelor")
+    fourth = make_payer(auth_client, faculty.id, email=None, last_name="Четверокурсник",
+                        admission_year=base - 3, education_level="bachelor")
+    master = make_payer(auth_client, faculty.id, email=None, last_name="Магистр",
+                        admission_year=base - 1, education_level="master")
+
+    assert first["is_final_year"] is False
+    assert fourth["is_final_year"] is True
+    assert master["is_final_year"] is True
+
+    finishing = auth_client.get(f"{API}/payers/finishing").json()
+    assert {p["last_name"] for p in finishing} == {"Четверокурсник", "Магистр"}
+
+
+def test_specialist_finishes_a_year_later(auth_client, faculty, year_settings):
+    """Специалитет длится пять лет — на четвёртом курсе ему ещё рано в выпуск."""
+    base = academic_year_start()
+    fourth = make_payer(auth_client, faculty.id, email=None, last_name="Четвёртый",
+                        admission_year=base - 3, education_level="specialist")
+    fifth = make_payer(auth_client, faculty.id, email=None, last_name="Пятый",
+                       admission_year=base - 4, education_level="specialist")
+
+    assert fourth["is_final_year"] is False
+    assert fifth["is_final_year"] is True
+
+
+def test_continuing_to_master_keeps_the_record_active(auth_client, faculty, year_settings):
+    """Поступил в магистратуру — запись остаётся, но начинает отсчёт заново."""
+    base = academic_year_start()
+    payer = make_payer(auth_client, faculty.id, email=None, admission_year=base - 3,
+                       education_level="bachelor", group_name="4-мд-7")
+    assert payer["is_final_year"] is True
+
+    updated = auth_client.put(f"{API}/payers/{payer['id']}", json={
+        "education_level": "master", "admission_year": base, "group_name": "1-мг-2",
+    }).json()
+
+    assert updated["course"] == 1
+    assert updated["is_archived"] is False
+    assert updated["is_final_year"] is False
+
+
+def test_leaving_puts_the_record_into_the_archive_at_once(auth_client, faculty, year_settings):
+    """
+    Отчислился — в архив сразу, не дожидаясь формального конца срока обучения.
+    """
+    base = academic_year_start()
+    payer = make_payer(auth_client, faculty.id, email=None, admission_year=base,
+                       education_level="bachelor")
+    assert payer["is_archived"] is False
+
+    updated = auth_client.put(f"{API}/payers/{payer['id']}", json={
+        "archived_at": str(date.today()),
+    }).json()
+    assert updated["is_archived"] is True
+
+    assert auth_client.get(f"{API}/payers").json()["total"] == 0
+    assert auth_client.get(f"{API}/payers", params={"archive": "archived"}).json()["total"] == 1
+    assert auth_client.get(f"{API}/stats/dashboard").json()["total_payers"] == 0
+
+
+def test_archived_budget_payer_leaves_the_counts(auth_client, faculty, year_settings):
+    """Вышел из профкома — перестаёт считаться участником."""
+    payer = make_payer(auth_client, faculty.id, email=None, is_budget=True)
+    assert auth_client.get(f"{API}/stats/dashboard").json()["budget_count"] == 1
+
+    auth_client.put(f"{API}/payers/{payer['id']}", json={"archived_at": str(date.today())})
+    stats = auth_client.get(f"{API}/stats/dashboard").json()
+    assert stats["budget_count"] == 0
+    assert stats["total_payers"] == 0
+
+
+def test_returning_from_the_archive(auth_client, faculty, year_settings):
+    """Отметку можно снять — например, восстановился."""
+    base = academic_year_start()
+    payer = make_payer(auth_client, faculty.id, email=None, admission_year=base)
+    auth_client.put(f"{API}/payers/{payer['id']}", json={"archived_at": str(date.today())})
+
+    returned = auth_client.put(f"{API}/payers/{payer['id']}", json={"archived_at": None}).json()
+    assert returned["is_archived"] is False
+    assert auth_client.get(f"{API}/payers").json()["total"] == 1
+
+
+def test_finishing_count_on_the_dashboard(auth_client, faculty, year_settings):
+    base = academic_year_start()
+    make_payer(auth_client, faculty.id, email=None, last_name="Выпускник",
+               admission_year=base - 3, education_level="bachelor")
+    make_payer(auth_client, faculty.id, email=None, last_name="Первокурсник",
+               admission_year=base, education_level="bachelor")
+
+    assert auth_client.get(f"{API}/stats/dashboard").json()["finishing_count"] == 1
+
+
+def test_faculty_breakdown_matches_the_top_summary(auth_client, faculty, year_settings):
+    """
+    Разрез по деректоратам и сводка наверху должны говорить одно и то же:
+    участники делятся на бюджет и платников, должники — только платники.
+    """
+    for index in range(2):
+        make_payer(auth_client, faculty.id, email=None, last_name=f"Бюджетный{index}",
+                   is_budget=True)
+    make_payer(auth_client, faculty.id, email=None, last_name="Платник", is_budget=False)
+
+    stats = auth_client.get(f"{API}/stats/dashboard").json()
+    row = next(r for r in auth_client.get(f"{API}/stats/by-faculty").json()
+               if r["faculty_id"] == faculty.id)
+
+    assert row["total_payers"] == stats["total_payers"] == 3
+    assert row["budget_count"] == stats["budget_count"] == 2
+    assert row["paying_count"] == stats["paying_count"] == 1
+    assert row["debtors_count"] == stats["total_debtors"] == 1
+    assert row["budget_count"] + row["paying_count"] == row["total_payers"]

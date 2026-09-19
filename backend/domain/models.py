@@ -26,7 +26,7 @@ from sqlalchemy.orm import relationship
 
 from backend.core.database import Base
 from backend.domain.academic import (
-    apply_course_to_group_code, current_course, is_graduated,
+    apply_course_to_group_code, current_course, duration_years, is_graduated,
 )
 
 
@@ -170,6 +170,12 @@ class Payer(Base):
 
     membership_start = Column(Date, nullable=True)
     membership_end = Column(Date, nullable=True)
+
+    # Дата ухода: отчислился, доучился раньше срока или вышел из профкома.
+    # Срок обучения считается из года поступления, но жизнь бывает короче
+    # расписания, и без явной отметки такой человек висел бы в списках
+    # до формального выпуска.
+    archived_at = Column(Date, nullable=True, index=True)
     is_active = Column(Boolean, default=True, nullable=False, index=True)
 
     notes = Column(Text, nullable=True)  # шифруется
@@ -207,8 +213,18 @@ class Payer(Base):
 
     @property
     def is_archived(self) -> bool:
-        """Срок обучения вышел — запись уходит в архив."""
-        return is_graduated(self.admission_year, self.education_level)
+        """Человек больше не учится: срок вышел или его убрали вручную."""
+        return self.archived_at is not None or is_graduated(
+            self.admission_year, self.education_level
+        )
+
+    @property
+    def is_final_year(self) -> bool:
+        """Последний курс: этим летом выпуск, если не продолжит учёбу."""
+        if self.archived_at is not None or self.admission_year is None:
+            return False
+        course = current_course(self.admission_year, self.education_level, self.course)
+        return course is not None and course == duration_years(self.education_level)
 
     @property
     def missing_fields(self) -> List[str]:

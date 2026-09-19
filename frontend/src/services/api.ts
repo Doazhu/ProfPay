@@ -333,6 +333,8 @@ export interface PayerFilters {
   archive?: 'active' | 'archived' | 'all';
   /** Только записи, где не хватает группы, года поступления, деректората или даты рождения. */
   incomplete?: boolean;
+  /** Скрыть бюджетников: с них профком взносов не собирает. */
+  paying_only?: boolean;
 }
 
 export const payerApi = {
@@ -343,6 +345,12 @@ export const payerApi = {
 
   getById: async (id: number): Promise<Payer> => {
     const { data } = await api.get(`/payers/${id}`);
+    return data;
+  },
+
+  /** Кто на последнем курсе — этим летом выпуск. */
+  getFinishing: async (): Promise<Payer[]> => {
+    const { data } = await api.get('/payers/finishing');
     return data;
   },
 

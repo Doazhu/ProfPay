@@ -83,7 +83,9 @@ export interface Payer {
   admission_year: number | null;
   education_level: EducationLevel;
   course: number | null;       // вычисляется на бэкенде из года поступления
-  is_archived: boolean;        // срок обучения вышел
+  is_archived: boolean;        // срок обучения вышел или человек ушёл
+  archived_at: string | null;  // дата ухода: отчислился, доучился, вышел из профкома
+  is_final_year: boolean;      // последний курс — этим летом выпуск
   /** Незаполненные поля: «группа», «год поступления», «деректорат», «дата рождения». */
   missing_fields: string[];
   department: string | null;   // Кафедра abbreviation e.g. "ЦИАТ", optional
@@ -119,6 +121,12 @@ export interface DashboardStats {
   total_payers: number;
   active_payers: number;
   archived_payers: number;
+  /** Разбивка участников: бюджет платит через стипендию, платники — сами. */
+  budget_count: number;
+  paying_count: number;
+  /** Сколько человек на последнем курсе. */
+  finishing_count: number;
+  /** Долги и деньги — только по платникам. */
   total_debtors: number;
   total_paid_amount: number;
   paid_count: number;
@@ -131,7 +139,8 @@ export interface FacultyStats {
   faculty_id: number;
   faculty_name: string;
   total_payers: number;
-  paid_count: number;
+  budget_count: number;
+  paying_count: number;
   /** Не заплатившие вовсе плюс заплатившие частично — как в сводке наверху. */
   debtors_count: number;
   total_amount: number;
@@ -201,6 +210,8 @@ export interface PayerCreate {
   status?: PaymentStatus;
   membership_start?: string;
   membership_end?: string;
+  /** Дата ухода: отчислился, доучился, вышел из профкома. null — вернуть из архива. */
+  archived_at?: string | null;
   notes?: string;
 }
 
