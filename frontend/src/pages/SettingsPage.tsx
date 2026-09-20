@@ -3,7 +3,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import { LockClosedIcon } from '@radix-ui/react-icons';
 import {
   AlertDialog, Badge, Box, Button, Callout, Card, Flex, Heading, Link, RadioCards,
-  Separator, Switch, Text,
+  Switch, Text,
 } from '@radix-ui/themes';
 import { ThemeAppearanceControl } from '../components/ThemeToggle';
 import { useTheme, type Skin } from '../theme/ThemeContext';
@@ -11,7 +11,7 @@ import type { Faculty, PaymentSettings, BudgetSettings } from '../types';
 import {
   authApi, facultyApi, paymentSettingsApi, budgetSettingsApi, extractErrorMessage,
 } from '../services/api';
-import type { BudgetImpact, WithholdingResult } from '../services/api';
+import type { BudgetImpact } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
 /**
@@ -78,8 +78,6 @@ export default function SettingsPage() {
   // перед ним спрашиваем и показываем, скольких оно затронет.
   const [budgetImpact, setBudgetImpact] = useState<BudgetImpact | null>(null);
   const [budgetConfirmOpen, setBudgetConfirmOpen] = useState(false);
-  const [withholding, setWithholding] = useState(false);
-  const [withholdResult, setWithholdResult] = useState<WithholdingResult | null>(null);
   const [budgetError, setBudgetError] = useState('');
   const [budgetNotice, setBudgetNotice] = useState('');
 
@@ -553,7 +551,7 @@ export default function SettingsPage() {
         <div className="card animate-fade-in-fast">
           <h2 className="text-base md:text-lg font-semibold text-dark mb-2">Настройки для бюджетников</h2>
           <p className="text-accent text-sm mb-6">
-            Шаблонные значения стипендии и процента, подставляемые при добавлении бюджетника.
+            Подставляются при добавлении бюджетника.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg">
@@ -591,15 +589,14 @@ export default function SettingsPage() {
           {budgetSettings.default_stipend_amount && budgetSettings.default_budget_percent && (
             <Callout.Root color="gray" variant="surface" mt="4" style={{ maxWidth: 520 }}>
               <Callout.Text>
-                {budgetSettings.default_budget_percent}% от стипендии{' '}
-                {budgetSettings.default_stipend_amount} ₽ — это{' '}
+                {budgetSettings.default_budget_percent}% от{' '}
+                {budgetSettings.default_stipend_amount} ₽ —{' '}
                 <strong>
                   {new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 2 }).format(
                     Math.round(parseFloat(budgetSettings.default_stipend_amount) * parseFloat(budgetSettings.default_budget_percent)) / 100
                   )}
                 </strong>{' '}
-                в месяц. Это справка: сколько удерживает бухгалтерия вуза.
-                Сумма самого взноса берётся не отсюда, а со вкладки «Оплата».
+                в месяц. Справочно.
               </Callout.Text>
             </Callout.Root>
           )}
@@ -632,46 +629,6 @@ export default function SettingsPage() {
             )}
           </Flex>
 
-          <Separator my="5" size="4" />
-
-          {/* Взносы, удержанные из стипендии */}
-          <Heading size="3" mb="1">Взносы из стипендии</Heading>
-          <Text as="p" size="2" color="gray" mb="3">
-            У бюджетника взнос удерживают из стипендии, поэтому при добавлении
-            карточки платёж за год записывается сам. Тем, кто уже заведён —
-            например, загружен из таблицы, — его проводит эта кнопка.
-            Повторный запуск безопасен: у кого платёж за год уже есть, того пропустит.
-          </Text>
-
-          {withholdResult && (
-            <Callout.Root color={withholdResult.amount === null ? 'amber' : 'green'} mb="3">
-              <Callout.Text>
-                {withholdResult.amount === null
-                  ? 'Суммы взносов на этот учебный год не заданы — сначала задайте их '
-                    + 'на вкладке «Оплата», иначе неизвестно, какую сумму проводить.'
-                  : `Проведено за ${withholdResult.academic_year}: ${withholdResult.created}. `
-                    + `Уже было у ${withholdResult.already_had}. `
-                    + `Сумма каждого платежа — ${withholdResult.amount} ₽.`}
-              </Callout.Text>
-            </Callout.Root>
-          )}
-
-          <Button
-            variant="soft"
-            disabled={withholding}
-            onClick={async () => {
-              setWithholding(true);
-              try {
-                setWithholdResult(await budgetSettingsApi.withhold());
-              } catch (error) {
-                setBudgetError(extractErrorMessage(error, 'Не удалось провести взносы'));
-              } finally {
-                setWithholding(false);
-              }
-            }}
-          >
-            {withholding ? 'Проводим…' : 'Провести взносы всем бюджетникам'}
-          </Button>
         </div>
       )}
 
@@ -781,9 +738,7 @@ function SecuritySettings() {
             Требовать второй фактор от всех пользователей
           </Text>
           <Text as="p" size="1" color="gray" mt="1">
-            Каждый, включая заведённых позже, привязывает своё приложение
-            для кодов и вводит код при входе. Пока приложение не привязано,
-            разделы для него закрыты — это проверяет и сервер, не только интерфейс.
+            Пока приложение не привязано, разделы закрыты.
           </Text>
           <Text as="p" size="1" color="gray" mt="1">
             Свой второй фактор настраивается в разделе{' '}

@@ -59,6 +59,7 @@ def init_db() -> None:
     db = SessionLocal()
     try:
         _ensure_columns(db)
+        _sync_budget_status(db)
 
         if db.query(SystemUser).filter(SystemUser.role == UserRole.ADMIN).first():
             logger.info("Администратор уже существует")
@@ -81,6 +82,34 @@ def init_db() -> None:
         raise
     finally:
         db.close()
+
+
+def _sync_budget_status(db: Session) -> None:
+    """
+    Привести статусы бюджетников к правилу «бюджетник числится оплаченным».
+
+    Правило выставляется при сохранении карточки, но записи, заведённые
+    раньше — загруженные из таблицы или оставшиеся от прежней версии, — про
+    него не знают и висят с «не оплачено». Долги и статистика их и так не
+    считают, а вот в списке у них стоит метка, противоречащая правилу.
+
+    Проверка идемпотентна: трогает только те строки, которые ему не
+    соответствуют. Освобождённых не касается — это ручное решение
+    бухгалтера, и переписывать его нельзя.
+    """
+    from backend.domain.models import Payer, PaymentStatus
+
+    if not inspect(engine).has_table("payers"):
+        return
+
+    changed = db.query(Payer).filter(
+        Payer.is_budget.is_(True),
+        Payer.status.notin_([PaymentStatus.PAID, PaymentStatus.EXEMPT]),
+    ).update({Payer.status: PaymentStatus.PAID}, synchronize_session=False)
+
+    if changed:
+        db.commit()
+        logger.info("Бюджетникам проставлено «оплачено»: %s", changed)
 
 
 def _ensure_columns(db: Session) -> None:

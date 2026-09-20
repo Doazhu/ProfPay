@@ -126,9 +126,7 @@ export default function FinishingStudies({ onChange }: FinishingStudiesProps = {
     return (
       <Callout.Root color="gray" variant="surface">
         <Callout.Icon><CheckCircledIcon /></Callout.Icon>
-        <Callout.Text>
-          Выпускников в этом году нет — никого разбирать не нужно.
-        </Callout.Text>
+        <Callout.Text>Выпускников в этом году нет.</Callout.Text>
       </Callout.Root>
     );
   }
@@ -141,9 +139,7 @@ export default function FinishingStudies({ onChange }: FinishingStudiesProps = {
         <Badge color="amber">{payers.length}</Badge>
       </Flex>
       <Text as="p" size="2" color="gray" mb="3">
-        Последний курс. С 1 сентября такие записи уходят в архив сами —
-        скажите по каждому, продолжил он учёбу или нет, чтобы никто не пропал
-        из списков молча.
+        С 1 сентября уходят в архив.
       </Text>
 
       {error && (
@@ -203,9 +199,8 @@ export default function FinishingStudies({ onChange }: FinishingStudiesProps = {
         <Dialog.Content maxWidth="460px">
           <Dialog.Title>Продолжил учёбу</Dialog.Title>
           <Dialog.Description size="2" color="gray" mb="4">
-            {continuing?.full_name}. Запись остаётся в профкоме, но обучение
-            начинается заново: год поступления станет{' '}
-            {formatAcademicYear(currentAcademicYearStart())}, курс — первым.
+            {continuing?.full_name} · год поступления{' '}
+            {formatAcademicYear(currentAcademicYearStart())}, курс первый.
           </Dialog.Description>
 
           <Flex direction="column" gap="3">
@@ -238,7 +233,6 @@ export default function FinishingStudies({ onChange }: FinishingStudiesProps = {
                 placeholder="1-мг-2"
               />
               <Text as="p" size="1" color="gray" mt="1">
-                Можно не заполнять сейчас — группа правится в карточке.
                 Прежняя: {continuing?.group_code || '—'}
               </Text>
             </Box>
@@ -256,9 +250,7 @@ export default function FinishingStudies({ onChange }: FinishingStudiesProps = {
         <AlertDialog.Content maxWidth="440px">
           <AlertDialog.Title>Убрать в архив?</AlertDialog.Title>
           <AlertDialog.Description size="2">
-            {leaving?.full_name} пропадёт из списков, должников и статистики,
-            но останется в базе со всей историей платежей — её видно в «Архиве
-            выпускников». Вернуть можно в любой момент.
+            {leaving?.full_name} уйдёт в «Архив выпускников». Обратимо.
           </AlertDialog.Description>
           <Flex gap="3" mt="4" justify="end">
             <AlertDialog.Cancel>

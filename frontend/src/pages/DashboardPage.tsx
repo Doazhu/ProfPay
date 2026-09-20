@@ -95,9 +95,7 @@ export default function DashboardPage() {
       <Reveal>
         <Box mb="5">
           <Heading size="6">Панель управления</Heading>
-          <Text as="p" size="2" color="gray">
-            Участники профкома и сбор взносов
-          </Text>
+
         </Box>
       </Reveal>
 
@@ -125,9 +123,6 @@ export default function DashboardPage() {
                 </Text>
               </Flex>
               <Progress value={share(budget, total)} color="green" />
-              <Text as="p" size="1" color="gray" mt="1">
-                Взнос удерживают из стипендии — профком денег не собирает
-              </Text>
             </Box>
 
             <Box>
@@ -138,9 +133,6 @@ export default function DashboardPage() {
                 </Text>
               </Flex>
               <Progress value={share(paying, total)} color="amber" />
-              <Text as="p" size="1" color="gray" mt="1">
-                Вносят взнос сами — именно по ним считаются долги и сборы
-              </Text>
             </Box>
           </Grid>
         </GlowCard>
@@ -150,9 +142,9 @@ export default function DashboardPage() {
       <Grid columns={{ initial: '1', sm: '3' }} gap="4" mt="4">
         <Reveal delay={0.1}>
           <Metric
-            label="Собрано с платников"
+            label="Собрано"
             value={money(collected)}
-            hint={`${paid} из ${paying} внесли взнос`}
+            hint={`${paid} из ${paying}`}
             color="green"
           />
         </Reveal>
@@ -160,7 +152,7 @@ export default function DashboardPage() {
           <Metric
             label="Должники"
             value={debtors}
-            hint={paying > 0 ? `${share(debtors, paying)}% платников` : 'платников нет'}
+            hint={`${share(debtors, paying)}% платников`}
             color={debtors > 0 ? 'red' : 'gray'}
             to="/debtors"
           />
@@ -201,10 +193,7 @@ export default function DashboardPage() {
             {withFacultyData.length === 0 ? (
               <Callout.Root color="gray" variant="surface">
                 <Callout.Icon><ExclamationTriangleIcon /></Callout.Icon>
-                <Callout.Text>
-                  Пока никто не привязан к деректорату. Проверьте записи
-                  с неполными данными в «Плательщиках».
-                </Callout.Text>
+                <Callout.Text>Никто не привязан к деректорату.</Callout.Text>
               </Callout.Root>
             ) : (
               <Box style={{ overflowX: 'auto' }}>

@@ -60,6 +60,10 @@ export default function ReportsPage() {
     }
   };
 
+  /** Доля в процентах строкой. Ноль от нуля — это «0%», а не «NaN%». */
+  const percent = (part: number, whole: number) =>
+    whole > 0 ? `${((part / whole) * 100).toFixed(1)}%` : '0%';
+
   const formatMoney = (amount: number) => {
     return new Intl.NumberFormat('ru-RU', {
       style: 'currency',
@@ -101,6 +105,12 @@ export default function ReportsPage() {
     );
   }
 
+  const members = stats?.total_payers ?? 0;
+  const budget = stats?.budget_count ?? 0;
+  const paying = stats?.paying_count ?? 0;
+  const paid = stats?.paid_count ?? 0;
+  const debtors = stats?.total_debtors ?? 0;
+
   return (
     <div className="animate-fade-in">
       {/* Header */}
@@ -109,35 +119,35 @@ export default function ReportsPage() {
         <p className="text-accent mt-1">Аналитика по плательщикам и платежам</p>
       </div>
 
-      {/* Overview Cards */}
+      {/*
+        Проценты считаются от платников, а не от всех участников. Иначе
+        выходила бессмыслица: 147 должников из 305 — «48%», хотя 158 человек
+        из этих 305 бюджетники, и должниками быть не могут в принципе.
+      */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
         <div className="card text-center">
-          <p className="text-xs md:text-sm text-accent">Всего плательщиков</p>
-          <p className="text-xl md:text-2xl lg:text-3xl font-bold text-dark mt-1 md:mt-2">{stats?.total_payers || 0}</p>
+          <p className="text-xs md:text-sm text-accent">Участники профкома</p>
+          <p className="text-xl md:text-2xl lg:text-3xl font-bold text-dark mt-1 md:mt-2">{members}</p>
+          <p className="text-xs text-accent mt-1">
+            бюджет {budget} · платники {paying}
+          </p>
         </div>
         <div className="card text-center bg-green-50 border-green-200">
-          <p className="text-xs md:text-sm text-green-600">Оплатили</p>
-          <p className="text-xl md:text-2xl lg:text-3xl font-bold text-green-700 mt-1 md:mt-2">{stats?.paid_count || 0}</p>
-          <p className="text-xs text-green-500 mt-1">
-            {stats && stats.total_payers > 0
-              ? `${((stats.paid_count / stats.total_payers) * 100).toFixed(1)}%`
-              : '0%'}
-          </p>
+          <p className="text-xs md:text-sm text-green-600">Внесли взнос</p>
+          <p className="text-xl md:text-2xl lg:text-3xl font-bold text-green-700 mt-1 md:mt-2">{paid}</p>
+          <p className="text-xs text-green-500 mt-1">{percent(paid, paying)} платников</p>
         </div>
         <div className="card text-center bg-red-50 border-red-200">
           <p className="text-xs md:text-sm text-red-600">Должники</p>
-          <p className="text-xl md:text-2xl lg:text-3xl font-bold text-red-700 mt-1 md:mt-2">{stats?.total_debtors || 0}</p>
-          <p className="text-xs text-red-500 mt-1">
-            {stats && stats.total_payers > 0
-              ? `${((stats.total_debtors / stats.total_payers) * 100).toFixed(1)}%`
-              : '0%'}
-          </p>
+          <p className="text-xl md:text-2xl lg:text-3xl font-bold text-red-700 mt-1 md:mt-2">{debtors}</p>
+          <p className="text-xs text-red-500 mt-1">{percent(debtors, paying)} платников</p>
         </div>
         <div className="card text-center bg-primary-50 border-primary-light">
           <p className="text-xs md:text-sm text-primary">Собрано</p>
           <p className="text-lg md:text-xl lg:text-2xl font-bold text-primary mt-1 md:mt-2">
             {formatMoneyCompact(stats?.total_paid_amount || 0)}
           </p>
+          <p className="text-xs text-accent mt-1">только с платников</p>
         </div>
       </div>
 
@@ -151,11 +161,12 @@ export default function ReportsPage() {
             <thead>
               <tr className="border-b border-light-dark">
                 <th className="text-left py-3 px-4 text-sm font-medium text-accent">Деректорат</th>
-                <th className="text-right py-3 px-4 text-sm font-medium text-accent">Всего</th>
-                <th className="text-right py-3 px-4 text-sm font-medium text-accent">Оплатили</th>
+                <th className="text-right py-3 px-4 text-sm font-medium text-accent">Участники</th>
+                <th className="text-right py-3 px-4 text-sm font-medium text-accent">Бюджет</th>
+                <th className="text-right py-3 px-4 text-sm font-medium text-accent">Платники</th>
                 <th className="text-right py-3 px-4 text-sm font-medium text-accent">Должники</th>
-                <th className="text-right py-3 px-4 text-sm font-medium text-accent">% оплаты</th>
-                <th className="text-right py-3 px-4 text-sm font-medium text-accent">Сумма</th>
+                <th className="text-right py-3 px-4 text-sm font-medium text-accent">Внесли взнос</th>
+                <th className="text-right py-3 px-4 text-sm font-medium text-accent">Собрано</th>
               </tr>
             </thead>
             <tbody>
@@ -168,6 +179,7 @@ export default function ReportsPage() {
                     <td className="py-3 px-4 text-dark font-medium">{faculty.faculty_name}</td>
                     <td className="py-3 px-4 text-right text-dark">{faculty.total_payers}</td>
                     <td className="py-3 px-4 text-right text-green-600">{faculty.budget_count}</td>
+                    <td className="py-3 px-4 text-right text-dark">{faculty.paying_count}</td>
                     <td className="py-3 px-4 text-right text-red-600">{faculty.debtors_count}</td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -216,6 +228,7 @@ export default function ReportsPage() {
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-accent">Всего: {faculty.total_payers}</span>
                   <span className="text-green-600">Бюджет: {faculty.budget_count}</span>
+                  <span className="text-accent">Платники: {faculty.paying_count}</span>
                   <span className="text-red-600">Долг: {faculty.debtors_count}</span>
                   <span className="text-accent">{percentage.toFixed(0)}%</span>
                 </div>

@@ -206,8 +206,8 @@ export default function TwoFactorSettings(
         {status?.enabled && <Badge color="green">Включён</Badge>}
       </Flex>
       <Text as="p" size="1" color="gray" mb="3">
-        Второй фактор: кроме пароля при входе спрашивается шестизначный код
-        из Google Authenticator, Aegis или другого подобного приложения.
+        Кроме пароля при входе спрашивается код из Google Authenticator,
+        Aegis или другого подобного приложения.
       </Text>
 
       {error && (
@@ -233,9 +233,8 @@ export default function TwoFactorSettings(
             <Heading size="3">Сохраните резервные коды</Heading>
           </Flex>
           <Text as="p" size="2" color="gray" mb="3">
-            Второй раз они не покажутся: в базе остаются только их отпечатки.
-            Каждый код срабатывает один раз и заменяет код из приложения,
-            если телефон потерян или разряжен.
+            Второй раз не покажутся. Каждый срабатывает один раз и заменяет
+            код из приложения.
           </Text>
 
           {/* Моноширинные, в две колонки — так их удобно переписывать с экрана */}
@@ -266,8 +265,7 @@ export default function TwoFactorSettings(
           </Flex>
 
           <Text as="p" size="1" color="gray" mb="3">
-            Держите их не на том же телефоне, где стоит приложение: смысл
-            резервных кодов в том, чтобы войти, когда телефона под рукой нет.
+            Храните не на том же телефоне, где приложение.
           </Text>
 
           <Button onClick={acknowledgeCodes}>
@@ -288,8 +286,7 @@ export default function TwoFactorSettings(
             )}
             <Box style={{ flex: '1 1 260px' }}>
               <Text as="p" size="2" mb="2">
-                Отсканируйте код в приложении, затем введите шестизначное число,
-                которое оно покажет.
+                Отсканируйте код и введите число из приложения.
               </Text>
               <Text as="p" size="1" color="gray" mb="1">
                 Если сканировать нечем, добавьте ключ вручную:
@@ -350,8 +347,7 @@ export default function TwoFactorSettings(
       )}
 
       <Text as="p" size="1" color="gray" mt="3">
-        Восстановления пароля по почте нет — почтовый сервер для этого не нужен.
-        Если пароль забыт, его задаёт другой администратор в разделе «Пользователи».
+        Забытый пароль задаёт администратор в разделе «Пользователи».
       </Text>
 
       {/* Перевыпуск: старый набор гаснет целиком */}
@@ -359,8 +355,7 @@ export default function TwoFactorSettings(
         <Dialog.Content maxWidth="420px">
           <Dialog.Title>Новые резервные коды</Dialog.Title>
           <Dialog.Description size="2" color="gray" mb="4">
-            Прежние восемь перестанут работать все сразу — иначе новый набор
-            не уменьшал бы риск. Подтвердите, что это вы.
+            Прежние восемь перестанут работать.
           </Dialog.Description>
 
           <Flex direction="column" gap="3">

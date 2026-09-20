@@ -776,3 +776,33 @@ def test_faculty_breakdown_matches_the_top_summary(auth_client, faculty, year_se
     assert row["paying_count"] == stats["paying_count"] == 1
     assert row["debtors_count"] == stats["total_debtors"] == 1
     assert row["budget_count"] + row["paying_count"] == row["total_payers"]
+
+
+def test_startup_marks_existing_budget_payers_as_paid(auth_client, faculty, year_settings, db):
+    """
+    Записи, заведённые в обход карточки — загруженные из таблицы, например, —
+    про правило «бюджетник числится оплаченным» не знают. Приводим их к нему
+    на старте приложения: иначе в списке у них висит «Не оплачено», хотя
+    должниками они не считаются.
+    """
+    from backend.core.database import init_db
+    from backend.domain.models import Payer, PaymentStatus
+
+    db.add_all([
+        Payer(last_name="Бюджетный", first_name="Из", is_budget=True, is_active=True,
+              status=PaymentStatus.UNPAID),
+        Payer(last_name="Освобождённый", first_name="Из", is_budget=True, is_active=True,
+              status=PaymentStatus.EXEMPT),
+        Payer(last_name="Платник", first_name="Из", is_budget=False, is_active=True,
+              status=PaymentStatus.UNPAID),
+    ])
+    db.commit()
+
+    init_db()
+    db.expire_all()
+
+    by_name = {p.last_name: p.status for p in db.query(Payer).all()}
+    assert by_name["Бюджетный"] == PaymentStatus.PAID
+    # Освобождение — ручное решение бухгалтера, переписывать его нельзя.
+    assert by_name["Освобождённый"] == PaymentStatus.EXEMPT
+    assert by_name["Платник"] == PaymentStatus.UNPAID

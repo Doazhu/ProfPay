@@ -261,13 +261,6 @@ export interface BudgetImpact {
   without_values: number;   // у скольких поля пустые
 }
 
-export interface WithholdingResult {
-  created: number;
-  already_had: number;
-  academic_year: string;
-  amount: number | null;    // null — суммы взносов на год не заданы
-}
-
 export const budgetSettingsApi = {
   get: async (): Promise<BudgetSettings> => {
     const { data } = await api.get('/budget-settings');
@@ -295,12 +288,6 @@ export const budgetSettingsApi = {
     const { data } = await api.put('/budget-settings', {
       ...settings, apply_to_existing: applyToExisting,
     });
-    return data;
-  },
-
-  /** Провести взносы, удержанные из стипендии, всем бюджетникам за текущий год. */
-  withhold: async (): Promise<WithholdingResult> => {
-    const { data } = await api.post('/budget-settings/withhold');
     return data;
   },
 };

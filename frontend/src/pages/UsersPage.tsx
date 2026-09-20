@@ -115,12 +115,7 @@ export default function UsersPage() {
     run(async () => {
       await userApi.create(draft);
       setCreateOpen(false);
-      flash(
-        totpRequired
-          ? `Пользователь «${draft.username}» создан. При первом входе он `
-            + 'привяжет своё приложение-аутентификатор.'
-          : `Пользователь «${draft.username}» создан`,
-      );
+      flash(`Пользователь «${draft.username}» создан`);
       setDraft({ username: '', email: '', password: '', full_name: '', role: 'viewer' });
     }, 'Не удалось создать пользователя');
 
@@ -139,7 +134,7 @@ export default function UsersPage() {
     run(async () => {
       if (!passwordFor) return;
       await userApi.setPassword(passwordFor.id, newPassword);
-      flash(`Пароль для «${passwordFor.username}» изменён. Второй фактор не затронут.`);
+      flash(`Пароль для «${passwordFor.username}» изменён`);
       setPasswordFor(null);
       setNewPassword('');
     }, 'Не удалось изменить пароль');
@@ -224,9 +219,7 @@ export default function UsersPage() {
         <Callout.Root color="amber" mb="4">
           <Callout.Icon><LockOpen1Icon /></Callout.Icon>
           <Callout.Text>
-            Второй фактор не настроен у {withoutTotp} из {users.length}.
-            Пока приложение не привязано, разделы для них закрыты — экран
-            привязки откроется при следующем входе.
+            Второй фактор не настроен у {withoutTotp} из {users.length} — для них разделы закрыты.
           </Callout.Text>
         </Callout.Root>
       )}
@@ -354,10 +347,8 @@ export default function UsersPage() {
       <Callout.Root mt="4" color="gray" variant="surface">
         <Callout.Icon><PersonIcon /></Callout.Icon>
         <Callout.Text>
-          Отключённая запись в систему не входит, но её данные сохраняются;
-          удаление необратимо. После 5 неудачных попыток вход блокируется
-          на 15 минут — снять блокировку раньше можно кнопкой «Разблокировать».
-          Забытый пароль задаёт здесь администратор: восстановления по почте нет.
+          Отключение обратимо, удаление — нет. После 5 неудачных попыток вход
+          блокируется на 15 минут. Забытый пароль задаётся здесь.
         </Callout.Text>
       </Callout.Root>
 
@@ -366,8 +357,7 @@ export default function UsersPage() {
         <Dialog.Content maxWidth="480px">
           <Dialog.Title>Новый пользователь</Dialog.Title>
           <Dialog.Description size="2" color="gray" mb="4">
-            Пароль вы передаёте человеку сами — сменить его он сможет
-            в разделе «Пароль и вход».
+            Пароль передаёте сами.
           </Dialog.Description>
 
           <Flex direction="column" gap="3">
@@ -381,7 +371,7 @@ export default function UsersPage() {
                 autoComplete="off"
               />
               <Text as="p" size="1" color="gray" mt="1">
-                Латиница, цифры, точка, дефис и подчёркивание
+                Латиница, цифры, точка, дефис, подчёркивание
               </Text>
             </Box>
 
@@ -406,7 +396,7 @@ export default function UsersPage() {
                 autoComplete="off"
               />
               <Text as="p" size="1" color="gray" mt="1">
-                По ней тоже можно входить; писем система не шлёт
+                По ней тоже можно входить
               </Text>
             </Box>
 
@@ -509,8 +499,7 @@ export default function UsersPage() {
         <Dialog.Content maxWidth="420px">
           <Dialog.Title>Новый пароль</Dialog.Title>
           <Dialog.Description size="2" color="gray" mb="4">
-            Для «{passwordFor?.username}». Заодно снимется блокировка входа,
-            если она была. Второй фактор при этом остаётся на месте.
+            Для «{passwordFor?.username}». Блокировка входа снимется.
           </Dialog.Description>
 
           <PasswordField
@@ -538,8 +527,7 @@ export default function UsersPage() {
           <AlertDialog.Title>Сбросить второй фактор?</AlertDialog.Title>
           <AlertDialog.Description size="2">
             «{resettingTotp?.username}» сможет войти по одному паролю, пока
-            не привяжет приложение заново. Делайте это, только если человек
-            действительно потерял и телефон, и резервные коды.
+            не привяжет приложение заново.
           </AlertDialog.Description>
           <Flex gap="3" mt="4" justify="end">
             <AlertDialog.Cancel>
@@ -557,8 +545,7 @@ export default function UsersPage() {
           <AlertDialog.Title>Удалить пользователя?</AlertDialog.Title>
           <AlertDialog.Description size="2">
             «{deleting?.full_name}» будет удалён без возможности вернуть.
-            Если нужно просто закрыть доступ — отключите запись, данные
-            при этом сохранятся.
+            Чтобы просто закрыть доступ — отключите запись.
           </AlertDialog.Description>
           <Flex gap="3" mt="4" justify="end">
             <AlertDialog.Cancel>
