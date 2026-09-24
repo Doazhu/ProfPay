@@ -247,7 +247,7 @@ async def login(
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=f"Вход заблокирован после {settings.MAX_LOGIN_ATTEMPTS} неудачных попыток. "
-                   f"Повторите через {minutes} мин или восстановите пароль по почте.",
+                   f"Повторите через {minutes} мин.",
         )
 
     if not verify_password(login_data.password, user.hashed_password):

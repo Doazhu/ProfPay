@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { Button } from '@radix-ui/themes';
 import type { Payer, Faculty, PaymentStatus } from '../types';
 import { payerApi, facultyApi } from '../services/api';
+import SearchField, { Highlight, searchWords } from '../components/SearchField';
 
 /** Метка статуса — та же, что в списке плательщиков, иначе один человек
  *  на двух страницах выглядел бы по-разному. */
@@ -19,9 +21,12 @@ export default function DebtorsPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   const [searchParams, setSearchParams] = useSearchParams();
+  const lastRequest = useRef(0);
 
   const page = parseInt(searchParams.get('page') || '1');
   const facultyId = searchParams.get('faculty') ? parseInt(searchParams.get('faculty')!) : undefined;
+  const search = searchParams.get('search') || '';
+  const words = searchWords(search);
 
   useEffect(() => {
     facultyApi.getAll().then(setFaculties).catch(console.error);
@@ -29,20 +34,32 @@ export default function DebtorsPage() {
 
   useEffect(() => {
     loadDebtors();
-  }, [page, facultyId]);
+  }, [page, facultyId, search]);
 
   const loadDebtors = async () => {
+    // Ответ на устаревший запрос не должен затирать свежий — см. PayersPage.
+    const request = ++lastRequest.current;
     setIsLoading(true);
     try {
-      const response = await payerApi.getDebtors({ page, per_page: 20, faculty_id: facultyId });
+      const response = await payerApi.getDebtors({
+        page, per_page: 20, faculty_id: facultyId, search: search || undefined,
+      });
+      if (request !== lastRequest.current) return;
       setDebtors(response.items);
       setTotal(response.total);
       setPages(response.pages);
     } catch (error) {
       console.error('Failed to load debtors:', error);
     } finally {
-      setIsLoading(false);
+      if (request === lastRequest.current) setIsLoading(false);
     }
+  };
+
+  const applySearch = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (value) next.set('search', value); else next.delete('search');
+    next.delete('page');
+    setSearchParams(next, { replace: true });
   };
 
   const updateFilter = (key: string, value: string | undefined) => {
@@ -77,11 +94,17 @@ export default function DebtorsPage() {
       {/* Filter */}
       <div className="card mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-          <label className="text-sm text-accent whitespace-nowrap">Фильтр по деректорату:</label>
+          <SearchField
+            value={search}
+            onSearch={applySearch}
+            busy={isLoading && Boolean(search)}
+            style={{ flex: '1 1 260px' }}
+          />
           <select
             value={facultyId || ''}
             onChange={(e) => updateFilter('faculty', e.target.value)}
             className="input sm:max-w-xs"
+            aria-label="Деректорат"
           >
             <option value="">Все деректораты</option>
             {faculties.map((f) => (
@@ -93,9 +116,14 @@ export default function DebtorsPage() {
 
       {/* Table */}
       <div className="card overflow-hidden">
-        {isLoading ? (
+        {isLoading && debtors.length === 0 ? (
           <div className="flex items-center justify-center h-64 animate-fade-in">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          </div>
+        ) : debtors.length === 0 && search ? (
+          <div className="flex flex-col items-center gap-3 py-12 animate-fade-in">
+            <p className="text-accent">Никого не нашлось</p>
+            <Button variant="soft" color="gray" onClick={() => applySearch('')}>Сбросить поиск</Button>
           </div>
         ) : debtors.length === 0 ? (
           <div className="text-center py-12 animate-scale-in">
@@ -106,7 +134,10 @@ export default function DebtorsPage() {
             <p className="text-accent mt-1">Все плательщики оплатили взносы</p>
           </div>
         ) : (
-          <>
+          <div style={{
+            opacity: isLoading ? 0.55 : 1,
+            transition: 'opacity var(--dur-2) var(--ease)',
+          }}>
             {/* Desktop table */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
@@ -125,7 +156,7 @@ export default function DebtorsPage() {
                     <tr key={debtor.id} className="border-b border-light-dark last:border-0 transition-colors duration-150 hover:bg-red-50">
                       <td className="py-3 px-4">
                         <Link to={`/payers/${debtor.id}`} className="text-dark hover:text-primary font-medium transition-colors duration-150">
-                          {debtor.full_name}
+                          <Highlight text={debtor.full_name} words={words} />
                         </Link>
                         {debtor.course && <p className="text-xs text-accent">{debtor.course} курс</p>}
                       </td>
@@ -137,7 +168,9 @@ export default function DebtorsPage() {
                       </td>
                       <td className="py-3 px-4 text-accent">
                         {getFacultyName(debtor.faculty_id)}
-                        {(debtor.group_code || debtor.group_name) && ` / ${debtor.group_code || debtor.group_name}`}
+                        {(debtor.group_code || debtor.group_name) && (
+                          <> / <Highlight text={(debtor.group_code || debtor.group_name)!} words={words} /></>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         <StatusBadge status={debtor.status} />
@@ -163,11 +196,13 @@ export default function DebtorsPage() {
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="min-w-0 flex-1">
                       <Link to={`/payers/${debtor.id}`} className="font-medium text-dark hover:text-primary transition-colors">
-                        {debtor.full_name}
+                        <Highlight text={debtor.full_name} words={words} />
                       </Link>
                       <p className="text-xs text-accent mt-0.5">
                         {getFacultyName(debtor.faculty_id)}
-                        {(debtor.group_code || debtor.group_name) && ` / ${debtor.group_code || debtor.group_name}`}
+                        {(debtor.group_code || debtor.group_name) && (
+                          <> / <Highlight text={(debtor.group_code || debtor.group_name)!} words={words} /></>
+                        )}
                         {debtor.course && ` • ${debtor.course} курс`}
                       </p>
                     </div>
@@ -191,7 +226,7 @@ export default function DebtorsPage() {
                 </div>
               ))}
             </div>
-          </>
+          </div>
         )}
 
         {/* Pagination */}

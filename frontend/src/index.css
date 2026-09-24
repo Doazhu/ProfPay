@@ -98,6 +98,13 @@ table, .tabular, input[type="number"] { font-variant-numeric: tabular-nums; }
 
 ::selection { background: var(--accent-a5); }
 
+/* Совпадение с поиском. Браузерный жёлтый <mark> в тёмной теме слепит. */
+.search-hit {
+  background: var(--amber-a5);
+  color: inherit;
+  border-radius: 2px;
+}
+
 @layer components {
   .touch-target { min-width: 44px; min-height: 44px; }
 

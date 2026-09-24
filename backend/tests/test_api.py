@@ -136,6 +136,35 @@ def test_partial_update_keeps_untouched_fields(auth_client, faculty):
     assert not payer["decryption_failed"]
 
 
+def test_group_letters_are_stored_lowercase(auth_client, faculty):
+    """«1-МД-7» и «1-мд-7» — одна группа, даже если запрос пришёл мимо формы."""
+    created = make_payer(auth_client, faculty.id, email=None, group_name="1-МД-7")
+    assert created["group_name"] == "1-мд-7"
+
+    updated = auth_client.put(f"{API}/payers/{created['id']}", json={"group_name": "2-ИТ-3"})
+    assert updated.json()["group_name"] == "2-ит-3"
+
+
+def test_required_fields_cannot_be_cleared(auth_client, faculty):
+    """
+    Явный null или фамилия из пробелов — это 422, а не падение базы на
+    NOT NULL с ответом 500 и строкой с ФИО в логе сервера.
+    """
+    created = make_payer(auth_client, faculty.id, email=None)
+
+    assert auth_client.post(f"{API}/payers", json={
+        "last_name": "   ", "first_name": "Иван",
+    }).status_code == 422
+    for field in ("last_name", "first_name", "is_budget", "status", "is_active"):
+        response = auth_client.put(f"{API}/payers/{created['id']}", json={field: None})
+        assert response.status_code == 422, field
+
+    # Необязательное поле по-прежнему очищается.
+    cleared = auth_client.put(f"{API}/payers/{created['id']}", json={"middle_name": None})
+    assert cleared.status_code == 200
+    assert cleared.json()["middle_name"] is None
+
+
 def test_sensitive_fields_encrypted_in_db(auth_client, faculty, db):
     """Контакты в базе — шифротекст, ФИО — открытый текст для поиска в SQL."""
     from sqlalchemy import text
@@ -265,6 +294,23 @@ def test_future_payment_rejected(auth_client, faculty):
         "payment_date": str(date.today() + timedelta(days=1)),
     })
     assert response.status_code == 422
+
+
+def test_payment_edit_keeps_the_same_rules(auth_client, faculty):
+    """Правкой платежа нельзя сделать то, что запрещено при создании."""
+    from datetime import timedelta
+    payer = make_payer(auth_client, faculty.id)
+    payment = auth_client.post(f"{API}/payments", json={
+        "payer_id": payer["id"], "amount": "120.00", "payment_date": str(date.today()),
+    }).json()
+
+    future = str(date.today() + timedelta(days=1))
+    assert auth_client.put(f"{API}/payments/{payment['id']}",
+                           json={"payment_date": future}).status_code == 422
+    assert auth_client.put(f"{API}/payments/{payment['id']}",
+                           json={"amount": None}).status_code == 422
+    assert auth_client.put(f"{API}/payments/{payment['id']}",
+                           json={"amount": "240.00"}).status_code == 200
 
 
 # ---------------------------------------------------------------------------
@@ -464,6 +510,30 @@ def test_export_keeps_phone_readable(auth_client, faculty):
     phones = [c.value for row in sheet.iter_rows(min_row=2) for c in row
               if isinstance(c.value, str) and "79001234567" in c.value]
     assert phones == ["'+79001234567"]
+
+
+def test_export_follows_the_screen_filters(auth_client, faculty, year_settings):
+    """
+    В файл уходит то, что на экране. Раньше «Неполные данные» и скрытые
+    бюджетники в выгрузку не передавались, и в файле оказывались все.
+    """
+    import io
+
+    import openpyxl
+
+    make_payer(auth_client, faculty.id, last_name="Платник", email=None)
+    make_payer(auth_client, faculty.id, last_name="Бюджетник", email=None, is_budget=True)
+    make_payer(auth_client, faculty.id, last_name="Безгруппный", email=None, group_name=None)
+
+    def exported(**params):
+        response = auth_client.get(f"{API}/payers/export", params=params)
+        assert response.status_code == 200
+        sheet = openpyxl.load_workbook(io.BytesIO(response.content)).active
+        return sorted(row[1].split()[0] for row in sheet.iter_rows(min_row=2, values_only=True))
+
+    assert exported(paying_only="true") == ["Безгруппный", "Платник"]
+    assert exported(incomplete="true") == ["Безгруппный"]
+    assert exported(search="платник") == ["Платник"]
 
 
 # ---------------------------------------------------------------------------
@@ -776,6 +846,28 @@ def test_faculty_breakdown_matches_the_top_summary(auth_client, faculty, year_se
     assert row["paying_count"] == stats["paying_count"] == 1
     assert row["debtors_count"] == stats["total_debtors"] == 1
     assert row["budget_count"] + row["paying_count"] == row["total_payers"]
+
+
+def test_faculty_amounts_match_the_top_summary(auth_client, faculty, year_settings):
+    """
+    Деньги в разрезе по деректоратам — тех же участников, что и «Собрано
+    средств» наверху. Раньше туда попадали платежи выпускников, и после
+    1 сентября суммы расходились.
+    """
+    base = academic_year_start()
+    student = make_payer(auth_client, faculty.id, email=None, admission_year=base)
+    graduate = make_payer(auth_client, faculty.id, email=None, admission_year=base - 4)
+    for payer in (student, graduate):
+        auth_client.post(f"{API}/payments", json={
+            "payer_id": payer["id"], "amount": "240.00", "payment_date": str(date.today()),
+        })
+
+    stats = auth_client.get(f"{API}/stats/dashboard").json()
+    row = next(r for r in auth_client.get(f"{API}/stats/by-faculty").json()
+               if r["faculty_id"] == faculty.id)
+
+    assert str(stats["total_paid_amount"]) == "240.00"
+    assert str(row["total_amount"]) == "240.00"
 
 
 def test_startup_marks_existing_budget_payers_as_paid(auth_client, faculty, year_settings, db):
