@@ -457,10 +457,17 @@ async def export_payers(
     status_filter: Optional[PaymentStatus] = Query(None, alias="status"),
     search: Optional[str] = Query(None, max_length=100),
     archive: ArchiveFilter = Query(ArchiveFilter.ACTIVE),
+    incomplete: bool = Query(False),
+    paying_only: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: SystemUser = Depends(require_any_role),
 ):
-    """Выгрузка в Excel."""
+    """
+    Выгрузка в Excel — ровно того, что сейчас на экране.
+
+    Фильтры те же, что у списка: раньше «Неполные данные» и скрытые
+    бюджетники в выгрузку не передавались, и в файл уходили все подряд.
+    """
     import openpyxl
     from openpyxl.styles import Alignment, Font, PatternFill
 
@@ -468,6 +475,7 @@ async def export_payers(
         skip=0, limit=10_000,
         faculty_id=faculty_id, status=status_filter, search=search,
         archived=_ARCHIVE_FLAG[archive],
+        incomplete_only=incomplete, paying_only=paying_only,
     )
     faculties = {f.id: (f.short_name or f.name) for f in FacultyRepository(db).get_all(active_only=False)}
 

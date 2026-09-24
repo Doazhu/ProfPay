@@ -24,6 +24,22 @@ from backend.main import app  # noqa: E402
 ADMIN_PASSWORD = "test-admin-password"
 
 
+if engine.dialect.name == "sqlite":
+    from sqlalchemy import event  # noqa: E402
+
+    @event.listens_for(engine, "connect")
+    def _unicode_lower(dbapi_connection, _record):
+        """
+        lower() в SQLite знает только латиницу, в Postgres — и кириллицу.
+        ILIKE на SQLite превращается в lower() LIKE lower(), и без подмены
+        тесты не увидели бы, находит ли «иванов» «Иванова».
+        """
+        dbapi_connection.create_function(
+            "lower", 1, lambda value: value.lower() if isinstance(value, str) else value,
+            deterministic=True,
+        )
+
+
 @pytest.fixture(autouse=True)
 def reset_login_throttle():
     """

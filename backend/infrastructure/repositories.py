@@ -11,11 +11,12 @@
 остались ровно те поля, по которым нужно искать и считать.
 """
 import logging
+import re
 from datetime import date
 from decimal import Decimal
 from typing import List, Optional, Tuple
 
-from sqlalchemy import Integer, and_, case, func, or_, select
+from sqlalchemy import Integer, String, and_, case, cast, func, or_, select
 from sqlalchemy.orm import Session, joinedload, object_session
 
 from backend.core.encryption import (
@@ -169,6 +170,157 @@ def graduated_clause():
             Payer.admission_year < base_year + 1 - duration,
         ))
     return or_(*conditions)
+
+
+def _duration_expr():
+    """Срок обучения по уровню — то же, что academic.duration_years, но в SQL."""
+    return case(
+        *((Payer.education_level == level.value, years) for level, years in DURATION_YEARS.items()),
+        else_=DURATION_YEARS[DEFAULT_EDUCATION_LEVEL],
+    )
+
+
+def course_expr():
+    """
+    Курс на сегодня — то же, что Payer.computed_course, но в SQL.
+
+    Ограничен сверху сроком обучения, как и в интерфейсе: у выпускника
+    остаётся последний курс. Без года поступления — старое поле course.
+    """
+    raw = academic_year_start() + 1 - Payer.admission_year
+    duration = _duration_expr()
+    return case(
+        (Payer.admission_year.is_(None), Payer.course),
+        (raw < 1, 1),
+        (raw > duration, duration),
+        else_=raw,
+    )
+
+
+def group_code_expr():
+    """
+    Код группы с актуальным курсом — то же, что Payer.group_code, но в SQL.
+
+    Искать надо по тому, что бухгалтер видит в списке: «3-мд-35», а не
+    «1-мд-35», как код записан в базе с первого курса. ltrim по цифрам есть
+    и в Postgres, и в SQLite — регулярки у SQLite нет.
+    """
+    tail = func.ltrim(Payer.group_name, "0123456789")
+    course = course_expr()
+    return case(
+        (and_(course.isnot(None), tail != Payer.group_name), cast(course, String) + tail),
+        else_=Payer.group_name,
+    )
+
+
+# Запрос, набранный в английской раскладке: «bdfyjd» → «иванов».
+# Фамилий латиницей в базе нет, а забыть переключить раскладку — обычное дело.
+_LAYOUT = str.maketrans(
+    "qwertyuiop[]asdfghjkl;'zxcvbnm,.`",
+    "йцукенгшщзхъфывапролджэячсмитьбюе",
+)
+_LATIN = re.compile(r"[a-z]")
+_CYRILLIC = re.compile(r"[а-яё]")
+
+# Точки — ради инициалов: «Иванов И.И.» даёт слова «Иванов», «И», «И».
+_WORD_SPLIT = re.compile(r"[\s,.]+")
+_MAX_SEARCH_WORDS = 6
+
+
+def _fold_yo(expr):
+    """«ё» → «е»: одна и та же фамилия встречается и так, и так."""
+    return func.replace(func.replace(expr, "ё", "е"), "Ё", "Е")
+
+
+def _escape_like(text: str) -> str:
+    """% и _ из запроса — просто символы, а не маска."""
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _query_variants(text: Optional[str]) -> List[List[str]]:
+    """Слова запроса: как набран и, если набран латиницей, в русской раскладке."""
+    query = (text or "").lower()
+    variants = [query]
+    # Раскладку меняем до разбиения на слова: «,» «.» и «;» в ней — это
+    # «б», «ю» и «ж», и «,j,hjd» должен стать «бобров», а не «j» и «hjd».
+    if _LATIN.search(query) and not _CYRILLIC.search(query):
+        variants.append(query.translate(_LAYOUT))
+
+    result = []
+    for variant in variants:
+        words = [w for w in _WORD_SPLIT.split(variant.replace("ё", "е")) if w]
+        if words:
+            result.append(words[:_MAX_SEARCH_WORDS])
+    return result
+
+
+def _name_fields():
+    """Фамилия, имя, отчество с «ё», сведённой к «е»."""
+    return (
+        _fold_yo(Payer.last_name),
+        _fold_yo(Payer.first_name),
+        _fold_yo(func.coalesce(Payer.middle_name, "")),
+    )
+
+
+def search_clause(text: Optional[str]):
+    """
+    Поиск по ФИО, группе и кафедре. None — искать нечего.
+
+    Запрос режется на слова, и каждое слово должно найтись хоть в одном поле.
+    Раньше вся строка искалась в каждом поле целиком, и «Иванов Иван» не
+    находил никого: такой подстроки нет ни в фамилии, ни в имени.
+
+    Одна буква — инициал и ищется в начале имени или отчества: иначе
+    в «Иванов И.И.» буква «И» совпала бы с самой фамилией у любого Иванова.
+    Группа сравнивается без дефисов («3мд35» найдёт «3-мд-35»). Почта
+    и телефон зашифрованы — по ним SQL искать не может.
+    """
+    variants = _query_variants(text)
+    if not variants:
+        return None
+
+    last_name, first_name, middle_name = _name_fields()
+    fields = (last_name, first_name, middle_name, _fold_yo(func.coalesce(Payer.department, "")))
+    group = func.replace(func.coalesce(group_code_expr(), ""), "-", "")
+
+    def word_matches(word: str):
+        if len(word) == 1 and word.isalpha():
+            initial = f"{_escape_like(word)}%"
+            return or_(first_name.ilike(initial, escape="\\"),
+                       middle_name.ilike(initial, escape="\\"))
+        pattern = f"%{_escape_like(word)}%"
+        options = [field.ilike(pattern, escape="\\") for field in fields]
+        compact = word.replace("-", "")
+        if compact:
+            options.append(group.ilike(f"%{_escape_like(compact)}%", escape="\\"))
+        return or_(*options)
+
+    return or_(*(and_(*map(word_matches, words)) for words in variants))
+
+
+def search_rank(text: Optional[str]):
+    """
+    Насколько запись похожа на запрос — чтобы нужный человек стоял первым.
+
+    Фильтр ищет подстроку, и «Иванов Иван» находит ещё и Иванова Петра:
+    «иван» — начало его фамилии. Выкидывать его нельзя, поэтому слово,
+    совпавшее с фамилией, именем или отчеством целиком, поднимает запись
+    выше, чем совпавшее началом. None — ранжировать нечего.
+    """
+    names = _name_fields()
+    scores = []
+    for words in _query_variants(text):
+        for word in words:
+            if len(word) < 2:
+                continue
+            exact = _escape_like(word)
+            scores.append(case(
+                (or_(*(f.ilike(exact, escape="\\") for f in names)), 2),
+                (or_(*(f.ilike(f"{exact}%", escape="\\") for f in names)), 1),
+                else_=0,
+            ))
+    return sum(scores[1:], scores[0]) if scores else None
 
 
 def _paid_totals_subquery():
@@ -332,9 +484,8 @@ class PayerRepository:
         """
         Страница списка плательщиков и общее количество.
 
-        Поиск идёт по ФИО, группе и кафедре — они хранятся открытыми.
-        По почте и телефону искать нельзя: они зашифрованы, и SQL по ним
-        ничего не найдёт. На практике бухгалтер ищет по фамилии и группе.
+        Поиск идёт по ФИО, группе и кафедре — они хранятся открытыми
+        (подробности в search_clause).
         """
         paid = _paid_totals_subquery()
         query = (
@@ -366,22 +517,19 @@ class PayerRepository:
             clause = graduated_clause()
             query = query.filter(clause if archived else ~clause)
 
-        if search:
-            # ILIKE, а не lower()+LIKE: у Postgres lower() знает про кириллицу,
-            # а нам ещё нужно, чтобы то же выражение работало в тестах на SQLite.
-            pattern = f"%{search.strip()}%"
-            query = query.filter(or_(
-                Payer.last_name.ilike(pattern),
-                Payer.first_name.ilike(pattern),
-                func.coalesce(Payer.middle_name, "").ilike(pattern),
-                func.coalesce(Payer.group_name, "").ilike(pattern),
-                func.coalesce(Payer.department, "").ilike(pattern),
-            ))
+        found = search_clause(search)
+        if found is not None:
+            query = query.filter(found)
 
         total = query.order_by(None).count()
 
+        order = [Payer.last_name, Payer.first_name, Payer.id]
+        rank = search_rank(search)
+        if rank is not None:
+            order.insert(0, rank.desc())
+
         rows = (
-            query.order_by(Payer.last_name, Payer.first_name, Payer.id)
+            query.order_by(*order)
             .offset(skip)
             .limit(limit)
             .all()
@@ -723,10 +871,13 @@ class StatsRepository:
             .all()
         )
 
+        # Деньги — тех же участников, что и в счётчиках рядом и в сводке
+        # наверху. Раньше сюда шли платежи и выпускников, и 1 сентября сумма
+        # по деректоратам расходилась с «Собрано средств».
         amounts = dict(
             self.db.query(Payer.faculty_id, func.coalesce(func.sum(Payment.amount), 0))
             .join(Payment, Payment.payer_id == Payer.id)
-            .filter(Payer.faculty_id.isnot(None))
+            .filter(Payer.faculty_id.isnot(None), Payer.is_active.is_(True), ~graduated_clause())
             .group_by(Payer.faculty_id)
             .all()
         )

@@ -38,6 +38,35 @@ def validate_phone(phone: Optional[str]) -> Optional[str]:
     return cleaned
 
 
+def normalize_group_name(value: Optional[str]) -> Optional[str]:
+    """
+    Буквы группы — строчными: иначе «1-МД-7» и «1-мд-7» станут разными
+    группами. Форма приводит их сама, но API не должен на неё полагаться.
+    """
+    return value.lower() if value else value
+
+
+def reject_cleared(model: BaseModel, fields: dict) -> BaseModel:
+    """
+    Не дать очистить обязательное поле.
+
+    В схемах правки все поля необязательны, и явный null проходил проверку,
+    а падал уже в базе на NOT NULL — ответом 500 и строкой с ФИО в логе.
+    Фамилия из одних пробелов туда же: после очистки она становится None.
+    """
+    cleared = [label for name, label in fields.items()
+               if name in model.model_fields_set and getattr(model, name) is None]
+    if cleared:
+        raise ValueError(f"Нельзя оставить пустым: {', '.join(cleared)}")
+    return model
+
+
+def payment_date_not_in_future(value: Optional[date]) -> Optional[date]:
+    if value and value > date.today():
+        raise ValueError("Дата платежа не может быть в будущем")
+    return value
+
+
 # ---- Пароли ----
 
 # Список короткий намеренно: это не замена подбору по словарю, а отсечка
@@ -367,10 +396,16 @@ class PayerCreate(BaseModel):
     def clean(cls, v):
         return sanitize_string(v) if v else v
 
+    _group_lower = field_validator("group_name")(normalize_group_name)
+
     @field_validator("phone")
     @classmethod
     def phone_ok(cls, v):
         return validate_phone(v) if v else None
+
+    @model_validator(mode="after")
+    def required_not_cleared(self):
+        return reject_cleared(self, {"last_name": "фамилия", "first_name": "имя"})
 
 
 class PayerUpdate(BaseModel):
@@ -407,10 +442,19 @@ class PayerUpdate(BaseModel):
     def clean(cls, v):
         return sanitize_string(v) if v else v
 
+    _group_lower = field_validator("group_name")(normalize_group_name)
+
     @field_validator("phone")
     @classmethod
     def phone_ok(cls, v):
         return validate_phone(v) if v else None
+
+    @model_validator(mode="after")
+    def required_not_cleared(self):
+        return reject_cleared(self, {
+            "last_name": "фамилия", "first_name": "имя", "is_budget": "бюджет",
+            "status": "статус", "is_active": "активность",
+        })
 
 
 class PayerResponse(BaseModel):
@@ -481,12 +525,7 @@ class PaymentCreate(BaseModel):
     def clean(cls, v):
         return sanitize_string(v) if v else v
 
-    @field_validator("payment_date")
-    @classmethod
-    def not_in_future(cls, v):
-        if v and v > date.today():
-            raise ValueError("Дата платежа не может быть в будущем")
-        return v
+    _not_in_future = field_validator("payment_date")(payment_date_not_in_future)
 
 
 class PaymentUpdate(BaseModel):
@@ -502,6 +541,13 @@ class PaymentUpdate(BaseModel):
     @classmethod
     def clean(cls, v):
         return sanitize_string(v) if v else v
+
+    # Та же проверка, что при создании: иначе будущая дата ставилась правкой.
+    _not_in_future = field_validator("payment_date")(payment_date_not_in_future)
+
+    @model_validator(mode="after")
+    def required_not_cleared(self):
+        return reject_cleared(self, {"amount": "сумма", "payment_date": "дата"})
 
 
 class PaymentResponse(BaseModel):

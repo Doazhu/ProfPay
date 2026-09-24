@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  DownloadIcon, ExclamationTriangleIcon, MagnifyingGlassIcon, PlusIcon,
+  DownloadIcon, ExclamationTriangleIcon, PlusIcon,
 } from '@radix-ui/react-icons';
 import {
-  Badge, Button, Card, Checkbox, Flex, Heading, Select, Spinner, Text, TextField,
+  Badge, Button, Card, Checkbox, Flex, Heading, Select, Spinner, Text,
   Tooltip,
 } from '@radix-ui/themes';
 import type { Payer, Faculty, PaymentStatus } from '../types';
 import { payerApi, facultyApi, exportApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import SearchField, { Highlight, searchWords } from '../components/SearchField';
 
 /**
  * Метка статуса.
@@ -40,12 +41,16 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
 
   const [searchParams, setSearchParams] = useSearchParams();
   const { canEdit } = useAuth();
+  // Номер последнего запроса: ответ на более ранний, пришедший позже,
+  // не должен затирать таблицу.
+  const lastRequest = useRef(0);
 
   // Filter state from URL
   const page = parseInt(searchParams.get('page') || '1');
   const facultyId = searchParams.get('faculty') ? parseInt(searchParams.get('faculty')!) : undefined;
   const status = searchParams.get('status') as PaymentStatus | undefined;
   const search = searchParams.get('search') || '';
+  const words = searchWords(search);
   const archiveMode = (searchParams.get('archive') || defaultArchive) as 'active' | 'archived' | 'all';
   const incompleteOnly = searchParams.get('incomplete') === '1';
   // Бюджетников часто нужно убрать с глаз: взносы собираются не с них,
@@ -91,6 +96,7 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
   };
 
   const loadPayers = async () => {
+    const request = ++lastRequest.current;
     setIsLoading(true);
     try {
       const response = await payerApi.getAll({
@@ -103,14 +109,24 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
         incomplete: incompleteOnly || undefined,
         paying_only: hideBudget || undefined,
       });
+      if (request !== lastRequest.current) return;
       setPayers(response.items);
       setTotal(response.total);
       setPages(response.pages);
     } catch (error) {
       console.error('Failed to load payers:', error);
     } finally {
-      setIsLoading(false);
+      if (request === lastRequest.current) setIsLoading(false);
     }
+  };
+
+  // Поиск меняет адрес без новой записи в истории: «Назад» должен уводить
+  // со страницы, а не перебирать набранные буквы.
+  const applySearch = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (value) next.set('search', value); else next.delete('search');
+    next.delete('page');
+    setSearchParams(next, { replace: true });
   };
 
   const updateFilter = (key: string, value: string | undefined) => {
@@ -142,6 +158,7 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
     try {
       await exportApi.exportPayersExcel({
         faculty_id: facultyId, status, search: search || undefined, archive: archiveMode,
+        incomplete: incompleteOnly || undefined, paying_only: hideBudget || undefined,
       });
     } catch (error) {
       console.error('Export failed:', error);
@@ -186,14 +203,12 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
       {/* Фильтры */}
       <Card size="2" mb="4">
         <Flex gap="3" wrap="wrap">
-          <TextField.Root
-            placeholder="Поиск по фамилии, группе, кафедре"
+          <SearchField
             value={search}
-            onChange={(e) => updateFilter('search', e.target.value)}
+            onSearch={applySearch}
+            busy={isLoading && Boolean(search)}
             style={{ flex: '2 1 260px' }}
-          >
-            <TextField.Slot><MagnifyingGlassIcon /></TextField.Slot>
-          </TextField.Root>
+          />
 
           <Select.Root value={facultyId ? String(facultyId) : 'all'}
                        onValueChange={(v) => updateFilter('faculty', v === 'all' ? '' : v)}>
@@ -245,16 +260,35 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
 
       {/* Table */}
       <div className="card overflow-hidden">
-        {isLoading ? (
+        {isLoading && payers.length === 0 ? (
           <Flex align="center" justify="center" style={{ height: 220 }}>
             <Spinner size="3" />
           </Flex>
         ) : payers.length === 0 ? (
-          <div className="text-center py-12 text-accent animate-fade-in">
-            <p>Плательщики не найдены</p>
-          </div>
+          <Flex direction="column" align="center" gap="3" py="9" className="animate-fade-in">
+            <Text color="gray">{search ? 'Никого не нашлось' : 'Плательщики не найдены'}</Text>
+            {search && (
+              <Flex gap="2" wrap="wrap" justify="center">
+                <Button variant="soft" color="gray" onClick={() => applySearch('')}>
+                  Сбросить поиск
+                </Button>
+                {/* С 1 сентября выпускники уходят в архив сами — их чаще
+                    всего и не находят в обычном списке. */}
+                {viewMode === 'active' && (
+                  <Button variant="soft" onClick={() => changeView('all')}>
+                    Искать в архиве
+                  </Button>
+                )}
+              </Flex>
+            )}
+          </Flex>
         ) : (
-          <>
+          // Старая страница остаётся на месте, пока грузится новая:
+          // иначе таблица мигала бы на каждый набранный запрос.
+          <div style={{
+            opacity: isLoading ? 0.55 : 1,
+            transition: 'opacity var(--dur-2) var(--ease)',
+          }}>
             {/* Desktop table */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
@@ -284,7 +318,7 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
                             to={`/payers/${payer.id}`}
                             className="text-dark hover:text-primary font-medium transition-colors duration-150"
                           >
-                            {payer.full_name}
+                            <Highlight text={payer.full_name} words={words} />
                           </Link>
                           {payer.is_archived && (
                             <span
@@ -310,7 +344,9 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
                         )}
                       </td>
                       <td className="py-3 px-4 text-accent">{getFacultyName(payer.faculty_id)}</td>
-                      <td className="py-3 px-4 font-mono text-sm whitespace-nowrap">{payer.group_code || payer.group_name || '—'}</td>
+                      <td className="py-3 px-4 font-mono text-sm whitespace-nowrap">
+                        <Highlight text={payer.group_code || payer.group_name || '—'} words={words} />
+                      </td>
                       <td className="py-3 px-4 text-accent">{payer.is_archived ? '—' : payer.course || '—'}</td>
                       <td className="py-3 px-4 text-accent">{formatDate(payer.date_of_birth)}</td>
                       <td className="py-3 px-4">
@@ -340,13 +376,13 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
                   key={payer.id}
                   to={`/payers/${payer.id}`}
                   className={`block p-3 border border-light-dark rounded transition-colors duration-100 hover:border-accent-light ${
-                    payer.is_archived ? 'row-archived' : 'bg-white'
+                    payer.is_archived ? 'row-archived' : 'bg-panel'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-dark truncate">
-                        {payer.full_name}
+                        <Highlight text={payer.full_name} words={words} />
                         {payer.is_budget && (
                           <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">Б</span>
                         )}
@@ -363,7 +399,9 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-accent">
                       {getFacultyName(payer.faculty_id)}
-                      {(payer.group_code || payer.group_name) && ` • ${payer.group_code || payer.group_name}`}
+                      {(payer.group_code || payer.group_name) && (
+                        <> • <Highlight text={(payer.group_code || payer.group_name)!} words={words} /></>
+                      )}
                       {payer.is_archived
                         ? ' • архив'
                         : payer.course ? ` • ${payer.course} курс` : ''}
@@ -374,7 +412,7 @@ export default function PayersPage({ defaultArchive = 'active' }: PayersPageProp
                 </Link>
               ))}
             </div>
-          </>
+          </div>
         )}
 
         {/* Pagination */}

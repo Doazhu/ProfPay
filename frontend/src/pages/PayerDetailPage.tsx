@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import type { Payer, Payment, Faculty, PaymentSettings } from '../types';
+import type { Payer, Payment, Faculty, PaymentSettings, PaymentStatus } from '../types';
 import { EDUCATION_LEVEL_LABELS } from '../types';
 import GroupInput, {
   admissionYearFromCourse, buildGroupName, courseFromAdmissionYear,
@@ -83,7 +83,7 @@ export default function PayerDetailPage() {
     faculty_id: undefined as number | undefined,
     department: '',
     notes: '',
-    status: 'unpaid' as 'paid' | 'unpaid',
+    status: 'unpaid' as PaymentStatus,
   });
 
   // Группа правится теми же полями, что и при добавлении: курс, буквы, номер.
@@ -153,7 +153,8 @@ export default function PayerDetailPage() {
         faculty_id: payerData.faculty_id || undefined,
         department: payerData.department || '',
         notes: payerData.notes || '',
-        status: (payerData.status === 'paid') ? 'paid' : 'unpaid',
+        // Статус как есть: «частично» и «освобождён» не сводятся к двум кнопкам.
+        status: payerData.status,
       });
     } catch (error) {
       console.error('Failed to load payer:', error);
@@ -168,6 +169,10 @@ export default function PayerDetailPage() {
     try {
       const updated = await payerApi.update(Number(id), {
         ...editData,
+        // Статус уходит, только если его переключили. Раньше он отправлялся
+        // всегда, сведённый к «оплачено / не оплачено», и любое сохранение
+        // карточки снимало с человека освобождение — он становился должником.
+        status: editData.status !== payer.status ? editData.status : undefined,
         date_of_birth: editData.date_of_birth || undefined,
         is_budget: editIsBudget,
         stipend_amount: editIsBudget && editStipend ? Number(editStipend) : undefined,
@@ -404,7 +409,7 @@ export default function PayerDetailPage() {
                     </div>
                     <div>
                       <label className="block text-sm text-accent mb-1">К оплате</label>
-                      <div className="input bg-white flex items-center">
+                      <div className="input bg-panel flex items-center">
                         <span className={`font-bold ${editBudgetPayment > 0 ? 'text-primary' : 'text-accent'}`}>
                           {editBudgetPayment > 0
                             ? new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 2 }).format(editBudgetPayment)
@@ -660,7 +665,7 @@ export default function PayerDetailPage() {
                     className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
                       newPayment.semester === 'fall' && newPayment.amount === String(activeSettings.fall_amount)
                         ? 'bg-blue-500 text-white border-blue-500'
-                        : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-100'
+                        : 'bg-panel text-blue-700 border-blue-300 hover:bg-blue-100'
                     }`}
                   >
                     Осенний — {new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 }).format(activeSettings.fall_amount)}
@@ -675,7 +680,7 @@ export default function PayerDetailPage() {
                     className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
                       newPayment.semester === 'spring' && newPayment.amount === String(activeSettings.spring_amount)
                         ? 'bg-blue-500 text-white border-blue-500'
-                        : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-100'
+                        : 'bg-panel text-blue-700 border-blue-300 hover:bg-blue-100'
                     }`}
                   >
                     Весенний — {new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 }).format(activeSettings.spring_amount)}
@@ -691,7 +696,7 @@ export default function PayerDetailPage() {
                     className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
                       newPayment.amount === String(activeSettings.total_year_amount)
                         ? 'bg-blue-500 text-white border-blue-500'
-                        : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-100'
+                        : 'bg-panel text-blue-700 border-blue-300 hover:bg-blue-100'
                     }`}
                   >
                     Год — {new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 }).format(activeSettings.total_year_amount)}
@@ -781,7 +786,7 @@ export default function PayerDetailPage() {
                     </div>
                   )}
                   {payment.payment_method && (
-                    <div className="text-xs bg-white px-2 py-1 rounded text-accent">
+                    <div className="text-xs bg-panel px-2 py-1 rounded text-accent">
                       {paymentMethodLabel(payment.payment_method)}
                     </div>
                   )}
